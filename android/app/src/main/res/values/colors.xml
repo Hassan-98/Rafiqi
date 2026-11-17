@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home-screen widget defaults = the app's light «زمرد محدث» card (picker preview and
+         before the app's first snapshot). At runtime every colour comes from the snapshot's
+         `theme` (active palette + light/dark) — see widgetBridge.ts / WidgetStyle.java. -->
+    <color name="wg_text">#13201C</color>
+    <color name="wg_muted">#7C8F89</color>
+    <color name="wg_accent">#11725C</color>
+    <color name="wg_on_accent">#FFFFFF</color>
+    <color name="wg_on_accent_dim">#CCFFFFFF</color>
+    <color name="wg_gold">#B8923F</color>
+
+    <!-- Full-screen alarm window background (opaque emerald, never the splash). -->
+    <color name="alarm_bg">#0C463C</color>
+</resources>

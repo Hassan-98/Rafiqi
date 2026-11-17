@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fully rounded pill (count chips, buttons) — tinted per use. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFE7F1EE" />
+    <corners android:radius="100dp" />
+</shape>

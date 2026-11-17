@@ -1,0 +1,32 @@
+# Windows desktop packaging for the Electron shell (npm run desktop:build).
+appId: com.darkmon.myzikr
+productName: Rafiqi
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/**
+  - assets/icon-only.png
+  - package.json
+# Keep files unpacked — the Quran ASR worker and page-font fetches read
+# bundle assets at runtime; plain files avoid any asar path edge cases.
+asar: false
+# Deep-link scheme for the Google OAuth callback (same as the Android scheme,
+# so the Supabase redirect allowlist covers both). The installer writes the
+# registry entry; main.cjs also self-registers at runtime for dev runs.
+protocols:
+  - name: Rafiqi OAuth callback
+    schemes:
+      - com.darkmon.myzikr
+win:
+  icon: assets/icon-only.png
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: true
+  perMachine: false
+  shortcutName: رَفِيقِي
+  artifactName: ${productName}-Setup-${version}.${ext}
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}

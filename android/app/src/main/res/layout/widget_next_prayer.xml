@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «الصلاة القادمة» — the top of Home's prayer card (PrayerHero), painted into card_img by
+     CardPainter; the live countdown is the Chronometer, placed on its slot via the box padding. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/card_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/card_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/widget_next_prayer_label" />
+
+    <FrameLayout
+        android:id="@+id/card_chrono_box"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layoutDirection="ltr">
+
+        <Chronometer
+            android:id="@+id/card_chrono"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|left"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FFE6CD8F"
+            android:textDirection="ltr"
+            android:textSize="32dp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </FrameLayout>
+</FrameLayout>

@@ -1,0 +1,2342 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: 'Uthmanic Hafs';
+  src: url('./assets/fonts/UthmanicHafs1Ver18.woff2') format('woff2');
+  font-display: swap;
+}
+
+/* `dark:` utilities follow the in-app الوضع الليلي toggle (html.dark, set by
+   App.tsx + the pre-paint script), not the OS prefers-color-scheme — otherwise
+   an OS/app mismatch rendered half-dark screens. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ══ Colour tokens ═══════════════════════════════════════════════════
+     Redesign 2026-09 — three palettes, each with light + dark values:
+       زمرد محدث (default) · ليل ونحاس (data-palette="brass") ·
+       رمل ومريمية (data-palette="sage").
+     The token NAMES are the historic ones (teal = primary accent, gold =
+     achievement/ornament, cream = page, dark-* = dark surfaces) so every
+     existing utility re-skins from here. Values for dark mode + the other
+     palettes live in the `html.dark` / `html[data-palette]` blocks below.
+     ═══════════════════════════════════════════════════════════════════ */
+  --color-cream: #f4f0e6; /* page */
+  --color-cream-dark: #ebe4d4; /* inset / track */
+  --color-cream-soft: #faf7f0; /* raised on page */
+
+  --color-teal: #11725c; /* primary accent */
+  --color-teal-light: #1f8d71;
+  --color-teal-dark: #0a5243;
+  --color-teal-50: color-mix(in srgb, var(--color-teal) 8%, transparent);
+
+  --color-gold: #b8923f; /* achievement / ornament */
+  --color-gold-light: #d8ba72;
+  --color-gold-dark: #8a6a24;
+  --color-gold-50: color-mix(in srgb, var(--color-gold) 10%, transparent);
+
+  /* Dark surfaces (only reached through dark: utilities) */
+  --color-dark-bg: #08120f;
+  --color-dark-surface: #0e1c18;
+  --color-dark-card: #132520;
+  --color-dark-border: #213b34;
+  --color-track: #e7e0cf;
+
+  /* Ink */
+  --color-text-primary: #13201c;
+  --color-text-secondary: #455d56;
+  --color-text-muted: #7c8f89;
+  --color-text-on-dark: #eaf2ef;
+  /* Text/icons ON the primary accent (white on emerald, ink on brass…). */
+  --color-on-accent: #ffffff;
+
+  /* ── Fonts ───────────────────────────────────────── */
+  /* All self-hosted (bundled via @fontsource in main.tsx) so they render
+     reliably on-device without the Google Fonts CDN. Vazirmatn = clean modern
+     Arabic for UI + headings; Amiri = scripture + ornamental display. */
+  --font-arabic: 'Alan Sans Variable', 'Vazirmatn', system-ui, sans-serif;
+  --font-display: 'Alan Sans Variable', 'Vazirmatn', 'Amiri', serif;
+  --font-ornate: 'Amiri', 'Vazirmatn', serif;
+  /* KFGQPC Uthmanic Script Hafs (King Fahd Complex, bundled) — the smooth
+     Madinah-print Uthmani style; Amiri Quran's Naskh strokes read as sharp. */
+  --font-quran: 'Uthmanic Hafs', 'Amiri Quran', 'Amiri', serif;
+  --font-counter: 'Alan Sans Variable', 'Vazirmatn', system-ui, sans-serif;
+
+  /* ── Radius — soft containers, tighter insides ───── */
+  --radius-card: 1.375rem; /* 22px containers */
+  --radius-inner: 0.875rem; /* 14px rows / tiles inside cards */
+  --radius-btn: 0.875rem;
+  --radius-pill: 9999px;
+  --radius-sheet: 1.75rem 1.75rem 0 0;
+
+  /* ── Elevations — tinted by the palette (--tint) ─── */
+  --shadow-xs: 0 1px 2px color-mix(in srgb, var(--tint) 7%, transparent);
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--tint) 6%, transparent),
+    0 4px 14px color-mix(in srgb, var(--tint) 8%, transparent);
+  --shadow-md: 0 2px 4px color-mix(in srgb, var(--tint) 6%, transparent),
+    0 10px 28px color-mix(in srgb, var(--tint) 12%, transparent);
+  --shadow-lg: 0 4px 8px color-mix(in srgb, var(--tint) 8%, transparent),
+    0 22px 48px color-mix(in srgb, var(--tint) 18%, transparent);
+  --shadow-card: var(--shadow-sm); /* legacy alias */
+  --shadow-float: var(--shadow-lg); /* legacy alias */
+  --shadow-glow-teal: 0 0 0 4px color-mix(in srgb, var(--color-teal) 15%, transparent),
+    0 6px 22px color-mix(in srgb, var(--color-teal) 28%, transparent);
+  --shadow-glow-gold: 0 0 26px color-mix(in srgb, var(--color-gold) 38%, transparent);
+  --shadow-inset-soft: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+
+  /* ── Gradients (bg-[image:var(--gradient-…)]) — all token-derived ── */
+  --gradient-cream: linear-gradient(180deg, var(--color-cream) 0%, var(--color-cream-dark) 100%);
+  --gradient-teal: linear-gradient(140deg, var(--color-teal-dark) 0%, var(--color-teal) 55%, var(--color-teal-light) 100%);
+  --gradient-teal-soft: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-teal) 9%, transparent) 0%,
+    color-mix(in srgb, var(--color-teal-light) 4%, transparent) 100%
+  );
+  --gradient-gold: linear-gradient(135deg, var(--color-gold) 0%, var(--color-gold-light) 100%);
+  --gradient-gold-soft: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-gold) 15%, transparent) 0%,
+    color-mix(in srgb, var(--color-gold-light) 6%, transparent) 100%
+  );
+  --gradient-night: linear-gradient(180deg, var(--color-dark-bg) 0%, var(--color-dark-surface) 100%);
+  --gradient-hero-light: linear-gradient(
+    150deg,
+    var(--color-cream-soft) 0%,
+    color-mix(in srgb, var(--color-gold-light) 18%, var(--color-cream-soft)) 100%
+  );
+  --gradient-hero-dark: linear-gradient(
+    150deg,
+    var(--color-dark-card) 0%,
+    color-mix(in srgb, var(--color-teal) 14%, var(--color-dark-surface)) 100%
+  );
+
+  /* Safe area insets (consumed via Tailwind arbitrary values, e.g. pt-[var(--safe-top)]) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-start: env(safe-area-inset-left, 0px);
+  --safe-end: env(safe-area-inset-right, 0px);
+
+  /* ════════════════════════════════════════════════════════════════
+     APP-WIDE REDESIGN · WAVE 0 — token scaffolding (no visual change)
+     These are additive. Status colours are mapped to the CURRENT values
+     so nothing shifts; later waves change them in ONE place instead of
+     across files. See the redesign plan.
+     ════════════════════════════════════════════════════════════════ */
+
+  /* Status colours — generate bg-success / text-danger / … utilities.
+     Mapped to today's de-facto values (teal/gold/red) for a no-op start. */
+  --color-success: #1a6b5a; /* = teal */
+  --color-warning: #9e7a2e; /* = gold-dark */
+  --color-danger: #dc2626; /* = red-600 (current danger) */
+  --color-info: #2a8b74; /* = teal-light */
+
+  /* Spacing scale (4px base) — consumed via var() to retire p-3/p-4/p-5 drift. */
+  --space-1: 0.25rem; /* 4  */
+  --space-2: 0.5rem; /* 8  */
+  --space-3: 0.75rem; /* 12 */
+  --space-4: 1rem; /* 16 */
+  --space-5: 1.25rem; /* 20 */
+  --space-6: 1.5rem; /* 24 */
+  --space-7: 2rem; /* 32 */
+  --space-8: 3rem; /* 48 */
+  /* Section rhythm */
+  --gap-item: 0.5rem;
+  --gap-module: 1rem;
+  --gap-section: 1.25rem;
+
+  /* Type scale (font-size tokens; line-heights paired below). */
+  --fs-display-xl: 2.25rem;
+  --fs-display-lg: 1.75rem;
+  --fs-h1: 1.375rem;
+  --fs-h2: 1.125rem;
+  --fs-h3: 1rem;
+  --fs-body: 0.9375rem;
+  --fs-sm: 0.8125rem;
+  --fs-xs: 0.6875rem;
+  --tracking-tight: -0.01em;
+  --tracking-wide: 0.04em;
+
+  /* Motion — durations + easings (spring presets live in JS: utils/motion). */
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.45, 0, 0.2, 1);
+
+  /* Z-index stack — fixes TopAppBar + BottomNavBar both at z-30. */
+  --z-base: 0;
+  --z-content: 10;
+  --z-sticky: 20;
+  --z-nav: 30;
+  --z-backdrop: 40;
+  --z-panel: 50;
+  --z-toast: 60;
+}
+
+/* ── Base Reset & Globals ──────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-text-primary);
+  font-family: var(--font-arabic);
+  font-feature-settings: 'kern', 'liga', 'calt';
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+html.dark body {
+  background-color: var(--color-dark-bg);
+  color: var(--color-text-on-dark);
+}
+
+/* ── Accessibility settings (Wave 6) ───────────────────
+   Driven by App.tsx from settingsStore: a body font-scale, a reduce-motion
+   switch, and a high-contrast boost. */
+/* Base is 15px (was 16): the redesign's Alan Sans sets large, and the owner
+   asked for a slightly smaller default. */
+html {
+  font-size: 15px;
+}
+html[data-font-scale='small'] {
+  font-size: 13.5px;
+}
+html[data-font-scale='normal'] {
+  font-size: 15px;
+}
+html[data-font-scale='large'] {
+  font-size: 17px;
+}
+
+/* Respect the OS preference too, but let the explicit app setting win. */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+
+/* ── Night-first dark-mode token overrides (Wave 1) ────
+   The audit flagged secondary/muted text and teal accents as too low-contrast
+   on the dark emerald surfaces. Since these are single tokens shared by light
+   + dark, we lift them ONLY under html.dark — improving every screen's dark
+   mode at once without touching the light theme. */
+/* ── Palettes ─────────────────────────────────────────────────────────
+   Default (no data-palette) = زمرد محدث. `--tint` colours every shadow. */
+:root {
+  --tint: #0a3b30;
+  /* Native controls (<select> popup, date/time pickers, scrollbars) follow the
+     in-app theme — without this they stayed light in dark mode, so a select's
+     popup showed the light option text on white. */
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+  --tint: #000000;
+  --color-teal: #2a9d7f;
+  --color-teal-light: #4cc1a0;
+  --color-teal-dark: #13644f;
+  --color-gold: #d4b26a;
+  --color-gold-light: #e6cd8f;
+  --color-gold-dark: #a8863e;
+  --color-dark-bg: #08120f;
+  --color-dark-surface: #0e1c18;
+  --color-dark-card: #132520;
+  --color-dark-border: #213b34;
+  --color-text-secondary: #a6bfb7;
+  --color-text-muted: #7a938b;
+  --color-text-on-dark: #eaf2ef;
+  --color-track: rgba(234, 242, 239, 0.09);
+}
+
+/* ليل ونحاس — deep night-ink surfaces, a single warm brass accent. */
+html[data-palette='brass'] {
+  --tint: #1a2033;
+  --color-cream: #f3eee3;
+  --color-cream-dark: #e8dfcc;
+  --color-cream-soft: #fbf8f1;
+  --color-teal: #8a6430;
+  --color-teal-light: #a57a3d;
+  --color-teal-dark: #664820;
+  --color-gold: #b88a45;
+  --color-gold-light: #dcbd86;
+  --color-gold-dark: #8a652b;
+  --color-track: #e6dcc6;
+  --color-text-primary: #1a2033;
+  --color-text-secondary: #4b5268;
+  --color-text-muted: #858a9a;
+  --color-on-accent: #fffaf0;
+  /* Night surfaces are used by always-dark cards (e.g. قيام) in light mode too. */
+  --color-dark-bg: #0b0f1a;
+  --color-dark-surface: #111727;
+  --color-dark-card: #172036;
+  --color-dark-border: #26314b;
+}
+html[data-palette='brass'].dark {
+  --tint: #000000;
+  --color-teal: #c9a36a;
+  --color-teal-light: #e0c08c;
+  --color-teal-dark: #9b7640;
+  --color-gold: #e3c58e;
+  --color-gold-light: #f0dbb0;
+  --color-gold-dark: #b8904f;
+  --color-dark-bg: #0b0f1a;
+  --color-dark-surface: #111727;
+  --color-dark-card: #172036;
+  --color-dark-border: #26314b;
+  --color-text-secondary: #b5ae9f;
+  --color-text-muted: #857f72;
+  --color-text-on-dark: #ede6d6;
+  --color-on-accent: #1a1408;
+  --color-track: rgba(237, 230, 214, 0.09);
+}
+
+/* رمل ومريمية — warm stone neutrals, a calm sage accent. */
+html[data-palette='sage'] {
+  --tint: #3a352c;
+  --color-cream: #f4f1ea;
+  --color-cream-dark: #e9e4d9;
+  --color-cream-soft: #faf8f3;
+  --color-teal: #56715a;
+  --color-teal-light: #6b8a6f;
+  --color-teal-dark: #3f5543;
+  --color-gold: #a9844a;
+  --color-gold-light: #cfb07c;
+  --color-gold-dark: #7f6131;
+  --color-track: #e6e0d3;
+  --color-text-primary: #1f1d1a;
+  --color-text-secondary: #57524a;
+  --color-text-muted: #8b857a;
+  --color-dark-bg: #141311;
+  --color-dark-surface: #1b1a17;
+  --color-dark-card: #22211d;
+  --color-dark-border: #33312b;
+}
+html[data-palette='sage'].dark {
+  --tint: #000000;
+  --color-teal: #93b096;
+  --color-teal-light: #aac6ac;
+  --color-teal-dark: #6c8a70;
+  --color-gold: #d2b27c;
+  --color-gold-light: #e4cc9f;
+  --color-gold-dark: #a98a55;
+  --color-dark-bg: #141311;
+  --color-dark-surface: #1b1a17;
+  --color-dark-card: #22211d;
+  --color-dark-border: #33312b;
+  --color-text-secondary: #b7b1a5;
+  --color-text-muted: #878176;
+  --color-text-on-dark: #ece8df;
+  --color-on-accent: #13170f;
+  --color-track: rgba(236, 232, 223, 0.09);
+}
+
+/* High contrast wins over every palette (declared after them). */
+html.high-contrast:root {
+  --color-text-secondary: #38524c;
+  --color-text-muted: #5c746e;
+}
+html.high-contrast.dark:root {
+  --color-text-secondary: #d4e6e0;
+  --color-text-muted: #a9c2bb;
+}
+html.high-contrast .border-teal\/8,
+html.high-contrast .border-teal\/10 {
+  border-color: color-mix(in srgb, var(--color-teal) 30%, transparent);
+}
+
+/* ── Arabic Text Defaults ─────────────────────────── */
+[lang='ar'],
+.font-arabic {
+  font-family: var(--font-arabic);
+  line-height: 1.75;
+  letter-spacing: 0;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0;
+}
+
+.font-quran {
+  font-family: var(--font-quran);
+  line-height: 2.4;
+}
+
+.font-tafsir {
+  font-family: 'Amiri', 'IBM Plex Sans Arabic', serif;
+  line-height: 1.95;
+}
+
+/* ── Tafsir / dhikr paragraph rhythm ──────────────────
+   Just clean paragraph spacing — no drop-cap (it breaks cursive Arabic) and
+   no inline colour decoration (it caused contrast + markup-leak bugs). The
+   text inherits the surrounding card's colour, so it always has correct
+   contrast. */
+.t-rich p {
+  margin: 0 0 0.85em 0;
+}
+.t-rich p:last-child {
+  margin-bottom: 0;
+}
+
+/* Number font for countdown/counters (tabular nums) */
+.font-counter {
+  font-family: var(--font-counter);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Islamic geometric background (girih 8-point star lattice) ──────
+   Painted through a MASK so the lattice takes the palette's accent colour
+   (a data-URI SVG can't read CSS variables). Sits behind content. */
+/* In a layer so utilities like `fixed` / `absolute` can override it. */
+@layer components {
+  .bg-geometric {
+    position: relative;
+    isolation: isolate;
+  }
+}
+.bg-geometric::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--color-teal);
+  opacity: 0.045;
+  -webkit-mask: var(--girih) repeat top center / 88px 88px;
+  mask: var(--girih) repeat top center / 88px 88px;
+}
+html.dark .bg-geometric::before {
+  background-color: var(--color-gold);
+  opacity: 0.035;
+}
+:root {
+  --girih: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 88 88' fill='none' stroke='black' stroke-width='1.1'%3E%3Cpath d='M44 14l8.8 21.2L74 44l-21.2 8.8L44 74l-8.8-21.2L14 44l21.2-8.8z'/%3E%3Cpath d='M22.8 22.8L44 31.6l21.2-8.8-8.8 21.2 8.8 21.2L44 56.4l-21.2 8.8 8.8-21.2z'/%3E%3Cpath d='M0 0l14 14M88 0L74 14M0 88l14-14M88 88L74 74M44 0v14M44 88V74M0 44h14M88 44H74'/%3E%3C/svg%3E");
+  --star8: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1l3.2 7.8L23 12l-7.8 3.2L12 23l-3.2-7.8L1 12l7.8-3.2z'/%3E%3Cpath d='M4.2 4.2L12 7.4l7.8-3.2-3.2 7.8 3.2 7.8L12 16.6l-7.8 3.2 3.2-7.8z'/%3E%3C/svg%3E");
+}
+
+/* Lattice etched into a surface: drop <span class="lattice text-gold" />
+   as the first child of an `isolate relative overflow-hidden` container.
+   Colour = the span's currentColor, so it follows the palette. */
+.lattice {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: currentColor;
+  opacity: 0.08;
+  -webkit-mask: var(--girih) repeat center / 72px 72px;
+  mask: var(--girih) repeat center / 72px 72px;
+}
+.lattice-fade {
+  -webkit-mask:
+    var(--girih) repeat center / 72px 72px,
+    linear-gradient(to left, #000 0%, transparent 75%);
+  -webkit-mask-composite: source-in;
+  mask:
+    var(--girih) repeat center / 72px 72px intersect,
+    linear-gradient(to left, #000 0%, transparent 75%);
+}
+
+/* Utility: hide the scrollbar on horizontal strips (juz filmstrip etc.). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scroll shadows for modal/sheet bodies: a soft edge shows at the top/bottom
+   only while content is hidden there. Android's overlay scrollbar is invisible
+   until you scroll, so long forms looked like they ended at the fold. Pure CSS:
+   the `local` covers (panel colour) hide each shadow once you reach that end. */
+.scroll-fade {
+  --fade-bg: #fff;
+  background:
+    linear-gradient(var(--fade-bg) 30%, transparent) top / 100% 2.5rem no-repeat local,
+    linear-gradient(transparent, var(--fade-bg) 70%) bottom / 100% 2.5rem no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.16), transparent) top / 100% 0.9rem no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.16), transparent) bottom / 100% 0.9rem no-repeat scroll;
+}
+.dark .scroll-fade {
+  --fade-bg: var(--color-dark-surface);
+}
+
+/* ── Custom Scrollbar ─────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-teal-light);
+  border-radius: 9999px;
+}
+
+/* Focus ring + default interaction transitions live in the base layer so
+   Tailwind utilities can override them. Unlayered, they beat every utility:
+   `transition: all` wiped out each duration-/transition- class on buttons and
+   links, and the focus border-radius squared off rounded-full buttons. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-out-soft);
+  }
+}
+
+/* Placeholder text was nearly invisible on the cream/dark fields (browser
+   default grey blended into the surface). Use a readable, clearly-muted tone. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+/* Belt and braces for engines that draw the option list themselves. */
+html.dark option,
+html.dark optgroup {
+  background-color: var(--color-dark-surface);
+  color: var(--color-text-on-dark);
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: var(--color-text-on-dark);
+  opacity: 0.42;
+}
+
+/* ── Prevent body scroll when modal open ──────────── */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* ── Utility layer (glass, safe-area paddings, no-tap-highlight) ── */
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+  html.dark .glass {
+    background: rgba(28, 56, 48, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .safe-pt {
+    padding-top: var(--safe-top);
+  }
+  .safe-pb {
+    padding-bottom: var(--safe-bottom);
+  }
+  .safe-px {
+    padding-inline-start: var(--safe-start);
+    padding-inline-end: var(--safe-end);
+  }
+
+  /* Bottom clearance for pages that sit under the fixed bottom nav bar.
+   * The nav is h-16 (4rem) tall plus its own safe-area inset, so content must
+   * clear 4rem + safe-bottom; the extra 2rem keeps the last element from
+   * hugging the bar. Use on the scrolling page container instead of `pb-28`. */
+  .pb-nav {
+    /* bottom bar: 4rem tall + safe area + breathing room */
+    padding-bottom: calc(4rem + var(--safe-bottom) + 1.75rem);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Ring-style focus that respects the gold theme */
+  .focus-ring {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  /* Subtle gold rim used for hero cards */
+  .ring-gold-soft {
+    box-shadow: inset 0 0 0 1px var(--color-gold-light);
+  }
+}
+
+/* ── Animations ───────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+/* Update screen: a segment sweeping across when the shell reports no bytes. */
+@keyframes update-indeterminate {
+  from {
+    inset-inline-start: -40%;
+  }
+  to {
+    inset-inline-start: 100%;
+  }
+}
+.update-indeterminate {
+  animation: update-indeterminate 1.3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(201, 168, 76, 0.15);
+  }
+}
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* ── Badges («خزانة الأوسمة», 2026-11) ──────────────
+   Emblem motion for the top rarities: a slow halo spin, a sheen sweeping
+   across the seal, and the unlock pop. All transform/opacity only. */
+@keyframes badge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.badge-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: badge-spin 48s linear infinite;
+}
+@keyframes badge-sheen {
+  0%,
+  62% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(140%) skewX(-18deg);
+  }
+}
+.badge-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.badge-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-gold-light) 55%, transparent) 50%,
+    transparent 100%
+  );
+  animation: badge-sheen 5s ease-in-out infinite;
+}
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.4) rotate(-14deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+.badge-pop {
+  animation: badge-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes badge-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+.badge-glow {
+  animation: badge-glow 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-spin,
+  .badge-sheen::after,
+  .badge-pop,
+  .badge-glow {
+    animation: none;
+  }
+}
+
+/* ── Tajweed colours (text mode) ─────────────────────
+   MIRROR of src/data/tajweedPalette.ts = the V4 Mushaf font's own CPAL
+   palettes (light = palette 0, dark = palette 1), so text mode, the Mushaf
+   and the legend show the same colour per rule. Edit both together. */
+.tajweed-madda_normal {
+  color: #ce9e00;
+}
+.tajweed-madda_permissible {
+  color: #ff7b00;
+}
+.tajweed-madda_obligatory {
+  color: #f40000;
+}
+.tajweed-madda_necessary {
+  color: #b50000;
+}
+.tajweed-ghunnah,
+.tajweed-ikhafa,
+.tajweed-ikhafa_shafawi,
+.tajweed-iqlab,
+.tajweed-idgham_ghunnah,
+.tajweed-idgham_shafawi {
+  color: #09b000;
+}
+.tajweed-idgham_wo_ghunnah,
+.tajweed-idgham_mutajanisayn,
+.tajweed-idgham_mutaqaribayn,
+.tajweed-ham_wasl,
+.tajweed-laam_shamsiyah,
+.tajweed-slnt,
+.tajweed-silent {
+  color: #a5a5a5;
+}
+.tajweed-qalaqah {
+  color: #2fadff;
+}
+.tajweed-end {
+  color: var(--color-gold);
+}
+
+/* Dark reader themes (night/black/dusk) → the font's dark palette (1). */
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-madda_normal,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-madda_normal,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-madda_normal {
+  color: #ffc1e0;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-madda_permissible,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-madda_permissible,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-madda_permissible {
+  color: #ff8e3b;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-madda_obligatory,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-madda_obligatory,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-madda_obligatory {
+  color: #ff5e8e;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-madda_necessary,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-madda_necessary,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-madda_necessary {
+  color: #e30000;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-ghunnah,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-ghunnah,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-ghunnah,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-ikhafa,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-ikhafa,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-ikhafa,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-ikhafa_shafawi,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-ikhafa_shafawi,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-ikhafa_shafawi,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-iqlab,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-iqlab,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-iqlab,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-idgham_ghunnah,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-idgham_ghunnah,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-idgham_ghunnah,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-idgham_shafawi,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-idgham_shafawi,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-idgham_shafawi {
+  color: #26b55d;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-idgham_wo_ghunnah,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-idgham_wo_ghunnah,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-idgham_wo_ghunnah,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-idgham_mutajanisayn,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-idgham_mutajanisayn,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-idgham_mutajanisayn,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-idgham_mutaqaribayn,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-idgham_mutaqaribayn,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-idgham_mutaqaribayn,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-ham_wasl,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-ham_wasl,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-ham_wasl,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-laam_shamsiyah,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-laam_shamsiyah,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-laam_shamsiyah,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-slnt,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-slnt,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-slnt,
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-silent,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-silent,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-silent {
+  color: #999999;
+}
+.mushaf-surface[data-mushaf-theme='night'] .tajweed-qalaqah,
+.mushaf-surface[data-mushaf-theme='black'] .tajweed-qalaqah,
+.mushaf-surface[data-mushaf-theme='dusk'] .tajweed-qalaqah {
+  color: #00deff;
+}
+
+/* Tashkeel-off mode hides Arabic harakat. */
+[data-tashkeel='off'] .font-quran {
+  font-feature-settings: 'ss01';
+}
+
+/* ── Mushaf page ──────────────────────────────────── */
+/* Modelled on the printed Madani Mushaf (King Fahd Complex, 15-line Hafs):
+   a paper page carrying a small running head ABOVE a slim ruled frame
+   (outer rule · illuminated band · hairline, with fleuron corner blocks),
+   the 15-line text block inside it, and the page number BELOW it in a small
+   sunburst roundel. Hizb/juz/sajda notes sit in the OUTER paper margin.
+
+   Every colour comes from the reader theme's vars on `.mushaf-surface`:
+     --mushaf-bg-from/-to  paper          --mushaf-text   verse ink
+     --mushaf-frame        rules/ornament --mushaf-accent secondary ornament
+     --mushaf-head-ink     running head / margin notes
+     --mushaf-illum        band + cartouche fill (derived: frame on paper)
+   `--mushaf-gold` / `--mushaf-gold-ink` stay for older consumers (ayah
+   marks in text mode, swatches, memorization). */
+
+.mushaf-surface {
+  --mushaf-bg-from: #fdf9ef;
+  --mushaf-bg-to: #f5ecd8;
+  --mushaf-text: #1a2420;
+  --mushaf-text-muted: #7a5c1b;
+  --mushaf-gold: #c9a84c;
+  --mushaf-gold-ink: #7a5a14;
+  --mushaf-gold-soft: rgba(201, 168, 76, 0.35);
+  --mushaf-gold-line: rgba(158, 122, 46, 0.55);
+  --mushaf-inner-gap: #fcf7ec;
+  --mushaf-frame: #a47b2a;
+  --mushaf-accent: #2c6e60;
+  --mushaf-head-ink: #6b4d14;
+  --mushaf-illum-mix: 30%;
+  --mushaf-shadow: rgba(70, 48, 12, 0.2);
+  --mushaf-gutter: rgba(96, 66, 20, 0.2);
+  --mushaf-illum: color-mix(in srgb, var(--mushaf-frame) var(--mushaf-illum-mix), var(--mushaf-bg-from));
+  --mushaf-head-band: var(--mushaf-accent);
+  --mushaf-band: color-mix(in srgb, var(--mushaf-frame) calc(var(--mushaf-illum-mix) + 18%), var(--mushaf-bg-from));
+  /* Ornament masks (painted in --mushaf-frame): fleuron corner blocks of the
+     ruled frame, and the folio roundel. */
+  --mushaf-corner-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cg %3E%3Cpath fill-rule='evenodd' d='M13 13H26.5V26.5H13Z M19.75 14.9L24.6 19.75 19.75 24.6 14.9 19.75Z'/%3E%3Ccircle cx='19.75' cy='19.75' r='1.5'/%3E%3Cpath d='M13.4 13.4C12.4 9.6 10.4 7.4 6.2 6.2 7.4 10.4 9.6 12.4 13.4 13.4Z'/%3E%3Ccircle cx='4.4' cy='4.4' r='1.6'/%3E%3Ccircle cx='19.75' cy='10.2' r='1.25'/%3E%3Ccircle cx='10.2' cy='19.75' r='1.25'/%3E%3C/g%3E%3C/svg%3E");
+  --mushaf-corner-tr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cg transform='matrix(-1 0 0 1 30 0)'%3E%3Cpath fill-rule='evenodd' d='M13 13H26.5V26.5H13Z M19.75 14.9L24.6 19.75 19.75 24.6 14.9 19.75Z'/%3E%3Ccircle cx='19.75' cy='19.75' r='1.5'/%3E%3Cpath d='M13.4 13.4C12.4 9.6 10.4 7.4 6.2 6.2 7.4 10.4 9.6 12.4 13.4 13.4Z'/%3E%3Ccircle cx='4.4' cy='4.4' r='1.6'/%3E%3Ccircle cx='19.75' cy='10.2' r='1.25'/%3E%3Ccircle cx='10.2' cy='19.75' r='1.25'/%3E%3C/g%3E%3C/svg%3E");
+  --mushaf-corner-bl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cg transform='matrix(1 0 0 -1 0 30)'%3E%3Cpath fill-rule='evenodd' d='M13 13H26.5V26.5H13Z M19.75 14.9L24.6 19.75 19.75 24.6 14.9 19.75Z'/%3E%3Ccircle cx='19.75' cy='19.75' r='1.5'/%3E%3Cpath d='M13.4 13.4C12.4 9.6 10.4 7.4 6.2 6.2 7.4 10.4 9.6 12.4 13.4 13.4Z'/%3E%3Ccircle cx='4.4' cy='4.4' r='1.6'/%3E%3Ccircle cx='19.75' cy='10.2' r='1.25'/%3E%3Ccircle cx='10.2' cy='19.75' r='1.25'/%3E%3C/g%3E%3C/svg%3E");
+  --mushaf-corner-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cg transform='matrix(-1 0 0 -1 30 30)'%3E%3Cpath fill-rule='evenodd' d='M13 13H26.5V26.5H13Z M19.75 14.9L24.6 19.75 19.75 24.6 14.9 19.75Z'/%3E%3Ccircle cx='19.75' cy='19.75' r='1.5'/%3E%3Cpath d='M13.4 13.4C12.4 9.6 10.4 7.4 6.2 6.2 7.4 10.4 9.6 12.4 13.4 13.4Z'/%3E%3Ccircle cx='4.4' cy='4.4' r='1.6'/%3E%3Ccircle cx='19.75' cy='10.2' r='1.25'/%3E%3Ccircle cx='10.2' cy='19.75' r='1.25'/%3E%3C/g%3E%3C/svg%3E");
+  --mushaf-roundel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cg fill='none' stroke='black'%3E%3Ccircle cx='20' cy='20' r='13.2' stroke-width='1.5'/%3E%3Ccircle cx='20' cy='20' r='11.1' stroke-width='.6'/%3E%3C/g%3E%3Cg%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(0 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(45 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(90 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(135 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(180 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(225 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(270 20 20)'/%3E%3Cpath d='M20 1.4L22.2 4.7 20 8 17.8 4.7Z' transform='rotate(315 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(22.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(67.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(112.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(157.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(202.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(247.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(292.5 20 20)'/%3E%3Ccircle cx='20' cy='5.4' r='.95' transform='rotate(337.5 20 20)'/%3E%3C/g%3E%3C/svg%3E");
+  --mushaf-band-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Ccircle cx='7' cy='7' r='4.3' fill='none' stroke='black' stroke-width='1.5'/%3E%3Ccircle cx='7' cy='7' r='1.3'/%3E%3Cpath d='M0 -2.4L2.4 0 0 2.4-2.4 0Z M14 -2.4L16.4 0 14 2.4 11.6 0Z M0 11.6L2.4 14 0 16.4-2.4 14Z M14 11.6L16.4 14 14 16.4 11.6 14Z'/%3E%3C/svg%3E");
+  /* Page metrics derive from this container's width (cqi), so the page keeps
+     print proportions from a phone to a 1920 window (see .mushaf-frame). */
+  container-type: inline-size;
+}
+
+.mushaf-surface[data-mushaf-theme='sepia'] {
+  --mushaf-bg-from: #f7edd7;
+  --mushaf-bg-to: #eadab5;
+  --mushaf-text: #2a2113;
+  --mushaf-text-muted: #6b4f1c;
+  --mushaf-gold: #8f6a1d;
+  --mushaf-gold-ink: #5f4513;
+  --mushaf-gold-soft: rgba(143, 106, 29, 0.28);
+  --mushaf-gold-line: rgba(100, 72, 22, 0.62);
+  --mushaf-inner-gap: #f6ecd6;
+  --mushaf-frame: #85601f;
+  --mushaf-accent: #7d3a1c;
+  --mushaf-head-ink: #5a4012;
+  --mushaf-shadow: rgba(70, 45, 10, 0.24);
+  --mushaf-gutter: rgba(90, 58, 16, 0.24);
+}
+
+.mushaf-surface[data-mushaf-theme='mint'] {
+  --mushaf-head-band: var(--mushaf-frame);
+  --mushaf-bg-from: #f4f9f4;
+  --mushaf-bg-to: #e1ede4;
+  --mushaf-text: #13261e;
+  --mushaf-text-muted: #2c5a49;
+  --mushaf-gold: #b8963f;
+  --mushaf-gold-ink: #5f4a12;
+  --mushaf-gold-soft: rgba(184, 150, 63, 0.3);
+  --mushaf-gold-line: rgba(110, 88, 26, 0.5);
+  --mushaf-inner-gap: #f3f8f3;
+  --mushaf-frame: #2d7458;
+  --mushaf-accent: #a4812f;
+  --mushaf-head-ink: #245443;
+  --mushaf-illum-mix: 24%;
+  --mushaf-shadow: rgba(20, 60, 40, 0.18);
+  --mushaf-gutter: rgba(20, 70, 50, 0.18);
+}
+
+.mushaf-surface[data-mushaf-theme='sand'] {
+  --mushaf-bg-from: #f9f1e3;
+  --mushaf-bg-to: #eadbbf;
+  --mushaf-text: #2a2115;
+  --mushaf-text-muted: #744f1d;
+  --mushaf-gold: #b08a3c;
+  --mushaf-gold-ink: #6a4c16;
+  --mushaf-gold-soft: rgba(176, 138, 60, 0.3);
+  --mushaf-gold-line: rgba(106, 76, 22, 0.55);
+  --mushaf-inner-gap: #f8f0e2;
+  --mushaf-frame: #9a6a2a;
+  --mushaf-accent: #2f5f78;
+  --mushaf-head-ink: #684816;
+  --mushaf-shadow: rgba(80, 52, 16, 0.2);
+  --mushaf-gutter: rgba(100, 66, 22, 0.22);
+}
+
+.mushaf-surface[data-mushaf-theme='night'] {
+  --mushaf-head-band: color-mix(in srgb, var(--mushaf-accent) 38%, var(--mushaf-bg-from));
+  --mushaf-bg-from: #1b3730;
+  --mushaf-bg-to: #13271f;
+  --mushaf-text: #e8f0ee;
+  --mushaf-text-muted: #e2c57a;
+  --mushaf-gold: #e2c57a;
+  --mushaf-gold-ink: #e2c57a;
+  --mushaf-gold-soft: rgba(226, 197, 122, 0.3);
+  --mushaf-gold-line: rgba(226, 197, 122, 0.55);
+  --mushaf-inner-gap: #152920;
+  --mushaf-frame: #cdb06a;
+  --mushaf-accent: #7cc2aa;
+  --mushaf-head-ink: #d9c28a;
+  --mushaf-illum-mix: 22%;
+  --mushaf-shadow: rgba(0, 0, 0, 0.45);
+  --mushaf-gutter: rgba(0, 0, 0, 0.4);
+}
+
+.mushaf-surface[data-mushaf-theme='black'] {
+  --mushaf-head-band: color-mix(in srgb, var(--mushaf-accent) 38%, var(--mushaf-bg-from));
+  --mushaf-bg-from: #0b0b0a;
+  --mushaf-bg-to: #030303;
+  --mushaf-text: #ece6d2;
+  --mushaf-text-muted: #e2c57a;
+  --mushaf-gold: #e2c57a;
+  --mushaf-gold-ink: #e2c57a;
+  --mushaf-gold-soft: rgba(226, 197, 122, 0.28);
+  --mushaf-gold-line: rgba(226, 197, 122, 0.45);
+  --mushaf-inner-gap: #0a0a0a;
+  --mushaf-frame: #b99a55;
+  --mushaf-accent: #8c7a4c;
+  --mushaf-head-ink: #cdb57a;
+  --mushaf-illum-mix: 20%;
+  --mushaf-shadow: rgba(0, 0, 0, 0.6);
+  --mushaf-gutter: rgba(0, 0, 0, 0.6);
+}
+
+.mushaf-surface[data-mushaf-theme='dusk'] {
+  --mushaf-head-band: color-mix(in srgb, var(--mushaf-accent) 38%, var(--mushaf-bg-from));
+  --mushaf-bg-from: #263244;
+  --mushaf-bg-to: #1a2330;
+  --mushaf-text: #e7ecf3;
+  --mushaf-text-muted: #dcc58e;
+  --mushaf-gold: #d8c08a;
+  --mushaf-gold-ink: #e4cf98;
+  --mushaf-gold-soft: rgba(216, 192, 138, 0.28);
+  --mushaf-gold-line: rgba(216, 192, 138, 0.5);
+  --mushaf-inner-gap: #1c2634;
+  --mushaf-frame: #cfb57c;
+  --mushaf-accent: #8fb3d9;
+  --mushaf-head-ink: #dcc896;
+  --mushaf-illum-mix: 22%;
+  --mushaf-shadow: rgba(0, 0, 0, 0.45);
+  --mushaf-gutter: rgba(0, 0, 0, 0.4);
+}
+
+/* In global dark mode, only fall back to the night palette when NO explicit
+   reader theme is set. An explicitly-chosen theme (incl. cream) is ALWAYS
+   honoured — picking "كريمي" must give a cream page + cream verses, never a
+   dark page. (Use the reader's "ليلي/أسود" themes for dark reading.) */
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not(
+    [data-mushaf-theme='sepia']
+  ):not([data-mushaf-theme='night']):not([data-mushaf-theme='black']):not(
+    [data-mushaf-theme='mint']
+  ):not([data-mushaf-theme='sand']):not([data-mushaf-theme='dusk']) {
+  --mushaf-bg-from: #1b3730;
+  --mushaf-bg-to: #13271f;
+  --mushaf-text: #e8f0ee;
+  --mushaf-text-muted: #e2c57a;
+  --mushaf-gold: #e2c57a;
+  --mushaf-gold-ink: #e2c57a;
+  --mushaf-gold-soft: rgba(226, 197, 122, 0.3);
+  --mushaf-gold-line: rgba(226, 197, 122, 0.55);
+  --mushaf-inner-gap: #152920;
+  --mushaf-frame: #cdb06a;
+  --mushaf-accent: #7cc2aa;
+  --mushaf-head-ink: #d9c28a;
+  --mushaf-illum-mix: 22%;
+  --mushaf-shadow: rgba(0, 0, 0, 0.45);
+  --mushaf-gutter: rgba(0, 0, 0, 0.4);
+}
+
+/* The paper page. Everything scales from --page-w (the page's own width):
+   `--mushaf-m` is the inner/top/bottom margin (it holds the ruled frame);
+   `--mushaf-note` is the extra OUTER-margin column where the hizb/juz
+   cartouches sit, outside the frame as in print (only on reader pages,
+   which carry data-side = the page's outer edge; odd pages are right-hand
+   pages, so single and spread views agree). */
+.mushaf-frame {
+  --page-w: min(100cqi, 560px);
+  --mushaf-m: clamp(20px, calc(var(--page-w) * 0.054), 32px);
+  --mushaf-note: 0px;
+  --mushaf-pad: calc(var(--mushaf-m) * 0.26);
+  /* The ruled frame outside the body's 1px border: paper gap, 1px rule,
+     chain band, outer rule (slimmer on phones, below). */
+  --mushaf-gap: 2px;
+  --mushaf-band-w: 7px;
+  --mushaf-out: 1.5px;
+  --mushaf-corner-k: 1;
+  --mushaf-rule: calc(2px + var(--mushaf-gap) + var(--mushaf-band-w) + var(--mushaf-out));
+  --mushaf-outer: calc(var(--mushaf-m) + var(--mushaf-note));
+  position: relative;
+  max-width: var(--page-w);
+  width: 100%;
+  margin-inline: auto;
+  padding: calc(var(--mushaf-m) * 0.42) var(--mushaf-m) calc(var(--mushaf-m) * 0.36);
+  color: var(--mushaf-text);
+  background:
+    radial-gradient(ellipse 120% 90% at 50% 45%, transparent 55%, color-mix(in srgb, var(--mushaf-frame) 9%, transparent) 100%),
+    linear-gradient(180deg, var(--mushaf-bg-from) 0%, var(--mushaf-bg-to) 100%);
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--mushaf-frame) 18%, transparent),
+    0 1px 2px var(--mushaf-shadow),
+    0 10px 28px -6px var(--mushaf-shadow);
+}
+
+/* The page height the reader pages fill: the free height between the bars
+   (--page-avail, set by the reader). On short landscape phones that height
+   would shrink the text to ~9px, so there the page keeps a readable width
+   (≈ the screen, ≤ 520px) and scrolls instead. */
+.mushaf-surface {
+  --page-h: max(360px, var(--page-avail, 100dvh));
+}
+@media (max-height: 520px) {
+  .mushaf-surface {
+    --page-h: max(var(--page-avail, 100dvh), calc(min(100vw - 1rem, 520px) / 0.66));
+  }
+}
+/* In the reader the page (or book) is centred in the free height when its
+   print-proportioned height is shorter (portrait phones). */
+.quran-reader .mushaf-surface {
+  min-height: var(--page-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Reader pages FILL the free height between the reader's bars
+   (--page-h, set by the reader; the whole screen in immersive). The width
+   follows by the print ratio (0.66) where the height is the constraint
+   (landscape / desktop); on portrait phones the width is the limit and the
+   15 line slots simply get a taller pitch. The text block takes all the
+   height left inside the frame (flex), see .mushaf-page-lines. */
+.mushaf-frame[data-side] {
+  --page-w: min(100cqi, calc(var(--page-h, 900px) * 0.66));
+  --mushaf-note: clamp(20px, calc(var(--page-w) * 0.052), 36px);
+  /* Natural height = the print pitch (see .mushaf-page-lines), never taller
+     than the free height: there the text block shrinks to fit. */
+  max-height: var(--page-h, none);
+  display: flex;
+  flex-direction: column;
+}
+.mushaf-frame[data-side] > .mushaf-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mushaf-frame[data-side='right'] {
+  padding-inline-start: var(--mushaf-outer);
+}
+.mushaf-frame[data-side='left'] {
+  padding-inline-end: var(--mushaf-outer);
+}
+/* Phones (single page, container <= 600px): a slim frame (~6px of rules)
+   and EQUAL side margins just wide enough for the cartouche column, so the
+   text block is as wide as possible and centred. The print-like wide outer
+   margin is kept for the two-page book only. */
+@container (max-width: 600px) {
+  .mushaf-frame[data-side] {
+    --mushaf-gap: 1px;
+    --mushaf-band-w: 3px;
+    --mushaf-out: 1px;
+    --mushaf-corner-k: 0.62;
+    --mushaf-note: 18px;
+    padding-inline: calc(var(--mushaf-rule) + 2px + var(--mushaf-note));
+  }
+  .mushaf-frame[data-side] .mushaf-line-margin {
+    --note-x: calc(-1 * (var(--mushaf-pad) + var(--mushaf-rule) + 1px + var(--mushaf-note) * 0.61));
+  }
+}
+
+/* Running head (above the frame) and folio (below it). */
+.mushaf-top-strip,
+.mushaf-bottom-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75em;
+  font-family: 'Amiri', serif;
+  font-size: calc(var(--mushaf-m) * 0.6);
+  line-height: 1.5;
+  color: var(--mushaf-head-ink);
+  padding-inline: 0;
+  white-space: nowrap;
+}
+.mushaf-top-strip {
+  margin-bottom: calc(var(--mushaf-rule) + var(--mushaf-m) * 0.12);
+}
+.mushaf-bottom-strip {
+  justify-content: center;
+  margin-top: calc(var(--mushaf-rule) + var(--mushaf-m) * 0.14);
+}
+
+/* Running-head labels sit in small cartouches (rule + hairline). */
+.mushaf-meta-title,
+.mushaf-meta-pill {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.45;
+  padding: 0.05em 0.95em 0;
+  border: 1px solid var(--mushaf-frame);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mushaf-illum) 55%, var(--mushaf-bg-from));
+  box-shadow: inset 0 0 0 1.5px var(--mushaf-bg-from), inset 0 0 0 2.2px color-mix(in srgb, var(--mushaf-frame) 55%, transparent);
+}
+.mushaf-meta-pill {
+  flex-shrink: 0;
+}
+.mushaf-meta-sub {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* End-of-ayah ornament in the flowing TEXT render mode. */
+.mushaf-ayah-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  height: 1.7em;
+  margin-inline: 0.15em;
+  padding: 0 0.2em;
+  font-family: var(--font-counter, inherit);
+  font-size: 0.5em;
+  font-weight: 700;
+  vertical-align: middle;
+  color: var(--mushaf-gold-ink, var(--mushaf-gold, #b8902f));
+  border: 1.5px solid color-mix(in srgb, var(--mushaf-gold, #b8902f) 60%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--mushaf-gold, #b8902f) 10%, transparent);
+}
+
+/* Page number in a small sunburst roundel (ring + eight lozenge rays). */
+.mushaf-page-cartouche {
+  /* Roundel size from the page margin; the number is sized to its inner
+     ring (Ø ≈ 0.55 × roundel) by digit count (data-digits), so 1–3 digit
+     page numbers always sit inside it, optically centred. */
+  --roundel: calc(var(--mushaf-m, 24px) * 1.5);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--roundel);
+  height: var(--roundel);
+  margin-block: calc(var(--roundel) * -0.14) calc(var(--roundel) * -0.1);
+  padding-top: calc(var(--roundel) * 0.05);
+  font-family: 'Amiri', serif;
+  font-weight: 700;
+  font-size: calc(var(--roundel) * 0.4);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--mushaf-text);
+}
+.mushaf-page-cartouche[data-digits='3'] {
+  font-size: calc(var(--roundel) * 0.3);
+}
+.mushaf-page-cartouche::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mushaf-frame);
+  -webkit-mask: var(--mushaf-roundel) center / contain no-repeat;
+  mask: var(--mushaf-roundel) center / contain no-repeat;
+  pointer-events: none;
+}
+
+/* The text block + its ruled frame, drawn OUTSIDE the body's 1px hairline
+   border with stacked box-shadows (no layout cost):
+     2px paper gap · 1px rule · 7px illuminated band · 1.5px outer rule.
+   ::after lays an interlace chain (accent colour) into the band; ::before
+   masks fleuron blocks onto the four corners. The body is a size container
+   so the line pitch can derive from the text-block width (see below). */
+.mushaf-body {
+  position: relative;
+  container-type: inline-size;
+  padding: calc(var(--mushaf-pad) * 0.5) var(--mushaf-pad);
+  color: var(--mushaf-text);
+  border: 1px solid var(--mushaf-frame);
+  /* Rule stack (--mushaf-gap / -band-w / -out, set on .mushaf-frame). */
+  box-shadow:
+    0 0 0 var(--mushaf-gap) var(--mushaf-bg-from),
+    0 0 0 calc(var(--mushaf-gap) + 1px) var(--mushaf-frame),
+    0 0 0 calc(var(--mushaf-gap) + 1px + var(--mushaf-band-w)) var(--mushaf-band),
+    0 0 0 calc(var(--mushaf-gap) + 1px + var(--mushaf-band-w) + var(--mushaf-out)) var(--mushaf-frame);
+}
+/* Frames without a running head / folio (text mode) still clear the rules. */
+.mushaf-frame > .mushaf-body:first-child {
+  margin-top: var(--mushaf-rule);
+}
+.mushaf-frame > .mushaf-body:last-child {
+  margin-bottom: var(--mushaf-rule);
+}
+.mushaf-body::before,
+.mushaf-body::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+.mushaf-body::before {
+  /* Corner blocks: the 30px tile is drawn for the 12.5px rule stack and is
+     scaled with it (--mushaf-corner-k). */
+  --c: calc(30px * var(--mushaf-corner-k));
+  inset: calc(-26px * var(--mushaf-corner-k));
+  background: var(--mushaf-frame);
+  -webkit-mask:
+    var(--mushaf-corner-tl) left top / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-tr) right top / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-bl) left bottom / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-br) right bottom / var(--c) var(--c) no-repeat;
+  mask:
+    var(--mushaf-corner-tl) left top / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-tr) right top / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-bl) left bottom / var(--c) var(--c) no-repeat,
+    var(--mushaf-corner-br) right bottom / var(--c) var(--c) no-repeat;
+}
+/* Band chain: tile ∩ (border-box − content-box) = the 7px band ring only.
+   `round` fits a whole number of tiles along every edge. */
+.mushaf-body::after {
+  inset: calc(-1 * (var(--mushaf-gap) + 1px + var(--mushaf-band-w)));
+  padding: var(--mushaf-band-w);
+  z-index: 0;
+  background: var(--mushaf-accent);
+  -webkit-mask-image: var(--mushaf-band-tile), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-image: var(--mushaf-band-tile), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-size: var(--mushaf-band-w) var(--mushaf-band-w), auto, auto;
+  mask-size: var(--mushaf-band-w) var(--mushaf-band-w), auto, auto;
+  -webkit-mask-repeat: round, no-repeat, no-repeat;
+  mask-repeat: round, no-repeat, no-repeat;
+  -webkit-mask-clip: border-box, content-box, border-box;
+  mask-clip: border-box, content-box, border-box;
+  -webkit-mask-composite: source-in, xor, source-over;
+  mask-composite: intersect, exclude, add;
+}
+
+/* Print rhythm: the 15 line slots are spread EVENLY over the text block,
+   so the line pitch is the block height / 15 on every page — independent
+   of the fitted glyph size. Surah openings take whole slots; short pages
+   (1–2) centre. Outside the reader (no data-side) the block keeps the
+   print proportion (height ≈ 1.6 × width). */
+.mushaf-page-lines {
+  --mushaf-line-h: calc(100cqi * 1.6 / 15);
+  min-height: calc(100cqi * 1.6);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.mushaf-frame[data-side] .mushaf-page-lines {
+  /* A size container: its height / 15 is the slot pitch for everything in
+     it (lines, surah header, basmala). Its height is the PRINT text block
+     (1.6 x its width): on portrait phones the page is
+     centred in the leftover height, never stretched to a loose pitch; where
+     the window is shorter (landscape / desktop) it shrinks to fit. */
+  --mushaf-line-h: calc(100cqb / 15);
+  container-type: size;
+  height: calc(100cqi * 1.6);
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.mushaf-page-lines .mushaf-line-row {
+  height: var(--mushaf-line-h);
+}
+.mushaf-page-lines .mushaf-line {
+  line-height: var(--mushaf-line-h);
+}
+/* Pages 1–2: the text sits in a smaller domed panel inside the frame (the
+   lines fit its narrower width, the pitch stays the page's). */
+.mushaf-opening {
+  margin-inline: 7%;
+  /* Taller than its 8 slots so the panel fills most of the page (print). */
+  padding: calc(var(--mushaf-line-h) * 2.2) 7%;
+  border: 1px solid var(--mushaf-frame);
+  border-radius: 50% / calc(var(--mushaf-line-h) * 1.5);
+  background: color-mix(in srgb, var(--mushaf-bg-from) 70%, var(--mushaf-illum));
+  box-shadow:
+    0 0 0 2px var(--mushaf-bg-from),
+    0 0 0 3px var(--mushaf-frame),
+    0 0 0 8px var(--mushaf-band),
+    0 0 0 9px var(--mushaf-frame);
+}
+
+/* ── Margin notes (juz / hizb / rubʿ / sajda) ───────────────────────
+   As in the printed Madani Mushaf: a tall almond cartouche (pointed top and
+   bottom, double outline, pale fill, small finials) in the page's OUTER
+   margin, outside the ruled frame, centred on the line where the division
+   begins; the note is written horizontally on short stacked lines
+   («نصف / الحزب / ٢٦»). Sajda = a small ۩ in the same column. */
+.mushaf-line-row {
+  display: block;
+  position: relative;
+}
+
+/* Zero-size anchor at the centre of the note column; `justify-content:
+   center` on a 0-height box centres the notes on the line both ways. */
+.mushaf-line-margin {
+  /* + 0.11 note: the medallion is 1.22 notes wide — it grows OUTWARD, never into the frame. */
+  --note-x: calc(-1 * (var(--mushaf-pad) + var(--mushaf-rule) + (var(--mushaf-m) - var(--mushaf-rule)) * 0.45 + var(--mushaf-note) * 0.61));
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  z-index: 2;
+}
+.mushaf-frame[data-side='right'] .mushaf-line-margin {
+  inset-inline-start: var(--note-x);
+}
+.mushaf-frame[data-side='left'] .mushaf-line-margin {
+  inset-inline-end: var(--note-x);
+}
+
+.mushaf-medallion {
+  position: relative;
+  flex-shrink: 0;
+  /* Wider than the note column (centred on it) so «ربع / الحزب / ٥٩» sit
+     comfortably inside the almond — owner 2026-10. */
+  width: calc(var(--mushaf-note) * 1.22);
+  padding-block: calc(var(--mushaf-note) * 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Amiri', serif;
+  font-weight: 700;
+  font-size: max(7.5px, calc(var(--mushaf-note) * 0.3));
+  line-height: 1.12;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--mushaf-head-ink);
+}
+.mushaf-medallion > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.mushaf-medallion > span {
+  position: relative;
+}
+/* Finials: a small lozenge above and below the points. */
+.mushaf-medallion::before,
+.mushaf-medallion::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 3.5px;
+  height: 3.5px;
+  background: var(--mushaf-frame);
+  transform: translateX(-50%) rotate(45deg);
+}
+.mushaf-medallion::before {
+  top: -5px;
+}
+.mushaf-medallion::after {
+  bottom: -5px;
+}
+.mushaf-medallion--juz::before,
+.mushaf-medallion--juz::after {
+  width: 5px;
+  height: 5px;
+}
+.mushaf-medallion--juz::before {
+  top: -7px;
+}
+.mushaf-medallion--juz::after {
+  bottom: -7px;
+}
+.mushaf-medallion-num {
+  font-size: 1.12em;
+}
+.mushaf-medallion--sajda {
+  padding: 0;
+  font-size: calc(var(--mushaf-note) * 0.8);
+  line-height: 1;
+  color: var(--mushaf-frame);
+}
+.mushaf-medallion--sajda::before,
+.mushaf-medallion--sajda::after {
+  content: none;
+}
+
+/* ── Surah opening: illuminated cartouche + basmala ───────────────────
+   Each occupies exactly the Mushaf line slot(s) it replaces
+   (--mushaf-line-h, set by MushafPageView), so a page always keeps its
+   15-line proportions. */
+.mushaf-surah-head {
+  position: relative;
+  height: var(--mushaf-slot-h, 2.6rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mushaf-surah-head > svg {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  width: 100%;
+  height: var(--mushaf-line-h, 2.6rem);
+  transform: translateY(-50%);
+  overflow: visible;
+}
+/* End medallions: ترتيبها (start) · آياتها (end). Box = the SVG medallion
+   (centre x 58/1020, inner radius 35). */
+.mushaf-surah-medal {
+  position: absolute;
+  top: 50%;
+  /* Centred on its SVG medallion (x = 58 / 962 of 1020 → 5.69% from the
+     edge); --fit-s shrinks the text to the medallion (SurahHeader). */
+  transform: translate(var(--medal-dx), -50%) scale(var(--fit-s, 1));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Amiri', serif;
+  font-size: calc(var(--mushaf-line-h, 2.6rem) * 0.17);
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--mushaf-text);
+}
+.mushaf-surah-medal b {
+  font-size: 1.3em;
+  font-weight: 700;
+}
+.mushaf-surah-medal--start {
+  right: 5.69%;
+  --medal-dx: 50%;
+}
+.mushaf-surah-medal--end {
+  left: 5.69%;
+  --medal-dx: -50%;
+}
+.mushaf-surah-name {
+  position: relative;
+  /* --fit-s: shrunk to the white panel by SurahHeader when needed. */
+  transform: scale(var(--fit-s, 1));
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.28em;
+  font-size: calc(var(--mushaf-line-h, 2.6rem) * 0.42);
+  line-height: 1;
+  color: var(--mushaf-text);
+  white-space: nowrap;
+}
+.mushaf-surah-name--glyph {
+  font-family: 'RafiqiSurahNames', 'Amiri', serif;
+  /* Owner 2026-10: smaller name inside the band (was 0.92). */
+  font-size: calc(var(--mushaf-line-h, 2.6rem) * 0.74);
+  font-feature-settings: 'liga' 1;
+  /* The ligature glyphs sit high in their em box. */
+  padding-top: 0.12em;
+}
+.mushaf-surah-name--text {
+  font-family: 'Amiri', serif;
+  font-weight: 700;
+}
+
+.mushaf-basmala {
+  height: var(--mushaf-line-h, 2.6rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mushaf-basmala > span {
+  display: block;
+  /* Owner 2026-10: a smaller basmala (was 70% × 118%). */
+  width: 56%;
+  height: 95%;
+  background: var(--mushaf-text);
+  /* mask-image is set inline (bundled bismillah.svg URL). */
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* Loading / error placeholder page: an empty 15-line block (same height as
+   the real page, so nothing jumps when the verses arrive). */
+.mushaf-placeholder {
+  align-items: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+
+.mushaf-line {
+  /* Per-page auto-fit (in MushafPageView) scales each line's font-size so it
+     fills the frame width exactly — full lines reach edge-to-edge (matching
+     the printed Mushaf), short closing lines stay short and centre naturally.
+     `nowrap` forbids the browser from wrapping a Mushaf line across two
+     visual rows.
+
+     Line pitch matches the PRINTED Madani page: 15 lines over a text block
+     ~1.49× as tall as it is wide works out to ≈1.46–1.5 em baseline-to-
+     baseline. Anything looser (the old 1.85) makes the page far taller than
+     a real Mushaf page — and since the width-fit pins the glyph size, the
+     font slider can't compensate. The line content IS the print layout, so
+     print-tight spacing can't create collisions print doesn't have.
+
+     `overflow-x: clip` guards a 1-px measurement rounding error from causing
+     a horizontal scrollbar / frame breakage; the y-axis stays visible so the
+     tall QCF diacritic stacks are never clipped by the tight line box. */
+  text-align: center;
+  white-space: nowrap;
+  overflow-x: clip;
+  overflow-y: visible;
+  line-height: 1.5;
+  max-width: 100%;
+  /* The QCF page fonts position their own glyph advances; the body is only
+     shown once the page font is active (never in a fallback font). */
+  word-spacing: normal;
+}
+
+/* ── V4 tajweed colour fonts: palette per reader theme ─────────────
+   The V4 page fonts are COLR colour fonts — CSS `color` does not tint them;
+   the palette does (registered in MushafFontLoader): 0/1 = tajweed colours
+   on light/dark ink, 3/4 = plain light/dark ink. */
+.mushaf-body[data-qcf='v4'] {
+  font-palette: --qcf-light-plain;
+}
+.mushaf-body[data-qcf='v4'][data-tajweed='on'] {
+  font-palette: --qcf-light-tajweed;
+}
+.mushaf-surface[data-mushaf-theme='night'] .mushaf-body[data-qcf='v4'],
+.mushaf-surface[data-mushaf-theme='black'] .mushaf-body[data-qcf='v4'],
+.mushaf-surface[data-mushaf-theme='dusk'] .mushaf-body[data-qcf='v4'],
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .mushaf-body[data-qcf='v4'] {
+  font-palette: --qcf-dark-plain;
+}
+.mushaf-surface[data-mushaf-theme='night'] .mushaf-body[data-qcf='v4'][data-tajweed='on'],
+.mushaf-surface[data-mushaf-theme='black'] .mushaf-body[data-qcf='v4'][data-tajweed='on'],
+.mushaf-surface[data-mushaf-theme='dusk'] .mushaf-body[data-qcf='v4'][data-tajweed='on'],
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .mushaf-body[data-qcf='v4'][data-tajweed='on'] {
+  font-palette: --qcf-dark-tajweed;
+}
+
+.mushaf-body {
+  /* Guard against a measurement glitch widening the body — `clip` with a
+     margin (not `hidden`) so the frame corners and margin notes can paint
+     out into the page margin. */
+  max-width: 100%;
+  overflow: clip;
+  overflow-clip-margin: 120px;
+}
+
+/* ── Word + verse-end interaction language ─────────────
+   All decoration here is layout-neutral (text-decoration, box-shadow,
+   transform) — it must NEVER change a glyph's advance width or the
+   API-driven line breaks. The printed Madani layout is immutable; we only
+   decorate around it. */
+
+/* Audio "current word" highlight — underline + colour, NOT a background
+   fill (a fill bled into neighbouring words at tight auto-fit ratios). */
+.mushaf-word--active {
+  color: var(--color-gold-dark);
+  text-decoration: underline;
+  text-decoration-color: var(--color-gold);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+html.dark .mushaf-word--active {
+  color: var(--color-gold-light);
+}
+
+/* Print justification: each Mushaf line is a row of words spread edge to
+   edge (gaps widen — never the glyphs); short lines stay centred. Scoped to
+   the reader body (data-qcf), not the memorization page's own lines. */
+.mushaf-body[data-qcf] .mushaf-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  column-gap: 0.18em;
+  /* A line a little wider than the column at the page's glyph size is
+     narrowed (never shortened) from its start edge — layout-neutral, so
+     taps and the playing-ayah wash follow it. --line-sx set by the fit. */
+  overflow: visible;
+  transform: scaleX(var(--line-sx, 1));
+  transform-origin: right center;
+}
+.mushaf-body[data-qcf] .mushaf-line[data-short] {
+  justify-content: center;
+  column-gap: 0.3em;
+}
+
+/* «تظليل الآية أثناء السماع» — the whole ayah being recited gets a soft
+   continuous wash (words, the gaps between them and its end marker).
+   Background only: never changes a glyph's advance, so the printed line
+   layout is untouched. Warm gold on light pages, softer on dark ones. */
+.mushaf-surface {
+  --mushaf-play-hl: color-mix(in srgb, var(--color-gold) 24%, transparent);
+}
+.mushaf-surface[data-mushaf-theme='night'],
+.mushaf-surface[data-mushaf-theme='black'],
+.mushaf-surface[data-mushaf-theme='dusk'] {
+  --mushaf-play-hl: color-mix(in srgb, var(--color-gold-light) 20%, transparent);
+}
+.mushaf-verse--playing {
+  background-color: var(--mushaf-play-hl);
+  border-radius: 0 !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 0.25s ease;
+}
+/* Mushaf lines: the per-word wash is replaced by ONE band per line (drawn by
+   MushafLine), so the gaps of a justified line are shaded too. */
+.mushaf-body[data-qcf] .mushaf-line {
+  position: relative;
+  isolation: isolate;
+}
+.mushaf-body[data-qcf] .mushaf-line .mushaf-verse--playing {
+  background-color: transparent;
+}
+.mushaf-play-band {
+  position: absolute;
+  top: 10%;
+  bottom: 6%;
+  z-index: -1;
+  border-radius: 0.3em;
+  background: var(--mushaf-play-hl);
+  pointer-events: none;
+  transition: left 0.2s ease, width 0.2s ease;
+}
+
+/* 350ms long-press acknowledgement — a soft gold ring grows in while held. */
+.mushaf-word--pressing {
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-gold) 35%, transparent);
+}
+
+/* Verse-end glyph: a gentle resting shimmer hints it is the tappable entry
+   point to tafsir, without altering its position. */
+.mushaf-ayah-end {
+  border-radius: 9999px;
+  /* Text-grade gold ink per reader theme — the global gold-dark token was
+     too pale against the cream page (and flipped light in app dark mode
+     even on a light reader theme). */
+  color: var(--mushaf-gold-ink, var(--color-gold-dark));
+  animation: ayah-end-breathe 4.5s ease-in-out infinite;
+}
+.mushaf-ayah-end:hover {
+  color: var(--mushaf-gold, var(--color-gold));
+}
+.mushaf-ayah-end--pressing {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-gold) 35%, transparent);
+  filter: drop-shadow(
+    0 0 6px color-mix(in srgb, var(--color-gold) 60%, transparent)
+  );
+}
+
+/* ── Memorization (الحفظ) masked words — Mushaf-style ───────────
+   A hidden word KEEPS its glyph (so the Mushaf line geometry never shifts when
+   it is revealed) but renders invisible over a faint placeholder bar. */
+.memo-word {
+  border-radius: 6px;
+  transition: color 0.15s ease, opacity 0.2s ease, text-decoration-color 0.2s ease;
+}
+/* Hidden word = a blank fill-in-the-blank LINE (underline under invisible
+   glyphs), NOT a filled box. text-decoration is layout-neutral, so revealing a
+   word never shifts the Mushaf line. */
+.memo-word--hidden {
+  color: transparent;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-teal) 45%, transparent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.memo-word--faded {
+  opacity: 0.14;
+}
+/* On dark Mushaf pages (global dark fallback, or an explicit night/black
+   reader theme) the cream-tuned mask + verdict colours sink into the page —
+   lift them for contrast. Explicit cream/sepia themes keep the light values
+   even in app dark mode (the page itself is light there). */
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .memo-word--hidden,
+.mushaf-surface[data-mushaf-theme='night'] .memo-word--hidden,
+.mushaf-surface[data-mushaf-theme='black'] .memo-word--hidden ,
+.mushaf-surface[data-mushaf-theme='dusk'] .memo-word--hidden {
+  text-decoration-color: color-mix(in srgb, var(--color-teal-light) 75%, transparent);
+}
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .memo-word--faded,
+.mushaf-surface[data-mushaf-theme='night'] .memo-word--faded,
+.mushaf-surface[data-mushaf-theme='black'] .memo-word--faded ,
+.mushaf-surface[data-mushaf-theme='dusk'] .memo-word--faded {
+  opacity: 0.28;
+}
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .memo-word--wrong,
+.mushaf-surface[data-mushaf-theme='night'] .memo-word--wrong,
+.mushaf-surface[data-mushaf-theme='black'] .memo-word--wrong ,
+.mushaf-surface[data-mushaf-theme='dusk'] .memo-word--wrong {
+  color: #ff7b80;
+  text-decoration-color: #ff7b80;
+}
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .memo-word--skipped,
+.mushaf-surface[data-mushaf-theme='night'] .memo-word--skipped,
+.mushaf-surface[data-mushaf-theme='black'] .memo-word--skipped ,
+.mushaf-surface[data-mushaf-theme='dusk'] .memo-word--skipped {
+  color: #f5a623;
+  text-decoration-color: #f5a623;
+}
+html.dark
+  .mushaf-surface:not([data-mushaf-theme='cream']):not([data-mushaf-theme='sepia']):not([data-mushaf-theme='mint']):not([data-mushaf-theme='sand'])
+  .memo-word--peek,
+.mushaf-surface[data-mushaf-theme='night'] .memo-word--peek,
+.mushaf-surface[data-mushaf-theme='black'] .memo-word--peek ,
+.mushaf-surface[data-mushaf-theme='dusk'] .memo-word--peek {
+  color: var(--color-teal-light);
+  text-decoration-color: var(--color-teal-light);
+}
+/* The single next-to-recite word: a gold underline cue (no box). */
+.memo-word--next {
+  text-decoration: underline;
+  text-decoration-color: var(--color-gold);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
+}
+.memo-ayah-end {
+  cursor: pointer;
+}
+/* ── Hifz 2.0 per-word verdicts (Tarteel-style marking) ──────────────
+   wrong   = red + dotted underline (committed or pending)
+   skipped = amber (the reciter/ASR jumped over it)
+   peek    = teal dotted (revealed by a peek — logged as a mistake)
+   self-corrected = clean text, faint gold dotted underline (was red, fixed)
+   read    = follow-along soft green wash on matched words */
+.memo-word--wrong {
+  color: #e5484d;
+  text-decoration: underline dotted;
+  text-decoration-color: #e5484d;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.memo-word--skipped {
+  color: #d97706;
+  text-decoration: underline dotted;
+  text-decoration-color: #d97706;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.memo-word--peek {
+  color: var(--color-teal);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--color-teal);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.memo-word--selfcorrected {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--color-gold) 65%, transparent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.memo-word--read {
+  background: color-mix(in srgb, #1a9b6c 14%, transparent);
+  border-radius: 6px;
+}
+
+/* ── Recitation mistake feedback — loud + unmistakable ───────────── */
+@keyframes memo-error-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+  15%,
+  65% {
+    box-shadow:
+      0 0 0 4px #e5484d,
+      0 0 26px 8px color-mix(in srgb, #e5484d 65%, transparent);
+  }
+}
+@keyframes memo-error-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(7px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
+.memo-error-flash {
+  border-radius: 18px;
+  animation:
+    memo-error-flash 0.7s ease-out 1,
+    memo-error-shake 0.4s ease-in-out 1;
+}
+/* Big, unmistakable error badge over the page. */
+.memo-error-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e5484d;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px color-mix(in srgb, #e5484d 55%, transparent);
+  animation: memo-badge-pop 0.25s ease-out;
+}
+@keyframes memo-badge-pop {
+  from {
+    transform: translateX(-50%) scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* The word currently awaited during the voice recite-test — a gold underline
+   with a pulsing glow (no box) so the reciter sees what comes next. */
+@keyframes memo-current-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--color-gold) 35%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 1px 4px color-mix(in srgb, var(--color-gold) 85%, transparent));
+  }
+}
+.memo-word--current {
+  text-decoration: underline;
+  text-decoration-color: var(--color-gold);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
+  animation: memo-current-pulse 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .memo-word--current {
+    animation: none;
+  }
+  .memo-error-flash {
+    animation: memo-error-flash 0.7s ease-out 1;
+  }
+}
+
+@keyframes ayah-end-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 3px color-mix(in srgb, var(--color-gold) 45%, transparent)
+    );
+  }
+}
+
+/* Verse focus halo — a soft gold radial glow pulsed behind a verse's lines
+   when the reader jumps to it (search result / ?ayah / wird start). Applied
+   to a wrapping row, painted behind the text so glyphs never move. */
+.mushaf-verse-focus {
+  position: relative;
+}
+.mushaf-verse-focus::before {
+  content: '';
+  position: absolute;
+  inset: -2px -6px;
+  border-radius: 12px;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--color-gold) 28%, transparent) 0%,
+    transparent 72%
+  );
+  animation: verse-focus-pulse 2.4s ease-out 1 forwards;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes verse-focus-pulse {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Per-word verse focus glow — when the reader jumps to an ayah on the
+   current page, its words bloom a soft gold glow then settle. Pure
+   text-shadow, so no glyph ever moves. */
+.mushaf-word--focus,
+.mushaf-ayah-end--focus {
+  animation: verse-focus-glow 2.6s ease-out 1;
+}
+@keyframes verse-focus-glow {
+  0%,
+  100% {
+    text-shadow: none;
+  }
+  22% {
+    text-shadow:
+      0 0 12px color-mix(in srgb, var(--color-gold) 78%, transparent),
+      0 0 3px color-mix(in srgb, var(--color-gold) 90%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushaf-word--focus,
+  .mushaf-ayah-end--focus {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushaf-ayah-end {
+    animation: none;
+  }
+  .mushaf-verse-focus::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ── Audio seek bar ─────────────────────────────────────
+   A transparent-track range input layered over the custom gold fill div, so
+   the visible progress is the gradient bar and the range only contributes a
+   draggable thumb + keyboard/touch seeking. */
+.audio-seek {
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+.audio-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-gold);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.audio-seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-gold);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.audio-seek:disabled::-webkit-slider-thumb {
+  opacity: 0;
+}
+.audio-seek:disabled::-moz-range-thumb {
+  opacity: 0;
+}
+
+.audio-seek-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-cream-dark) 0%,
+    color-mix(in srgb, var(--color-gold) 50%, transparent) 50%,
+    var(--color-cream-dark) 100%
+  );
+  background-size: 200% 100%;
+  animation: audio-shimmer 1.1s linear infinite;
+}
+@keyframes audio-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Mushaf two-page spread (book view) ─────────────── */
+/* An open book: two facing pages meeting at the spine (no gap), a soft
+   gutter shadow on each inner edge, margin notes on each OUTER edge, and one
+   shared book shadow. In RTL the first child is the RIGHT-hand page (the
+   lower page number, read first). */
+.mushaf-surface {
+  max-width: 1200px;
+  margin-inline: auto;
+}
+/* The two-page book may use the whole window width. */
+.mushaf-surface:has(> .mushaf-spread) {
+  max-width: none;
+}
+
+.mushaf-spread {
+  /* Grid keeps both columns the same width and `stretch` makes both pages
+     the same height, like a printed book. */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  /* Pages size their margins from the book width (50cqi each). */
+  container-type: inline-size;
+  align-items: stretch;
+  gap: 0;
+  /* An open book on a desk: exactly the free height between the reader's
+     bars (--page-h; the whole screen in immersive), and as wide as two
+     print-proportioned pages (0.645 : 1 each) — or the window, if narrower. */
+  width: 100%;
+  max-width: min(100%, calc(var(--page-h, 700px) * 1.29));
+  margin-inline: auto;
+  border-radius: 4px;
+  box-shadow:
+    0 1px 3px var(--mushaf-shadow),
+    0 18px 42px -12px var(--mushaf-shadow);
+}
+
+.mushaf-spread > div {
+  min-width: 0;
+  display: flex;
+}
+
+.mushaf-spread .mushaf-frame {
+  /* Each page is half the book (the spread is the size container). */
+  --page-w: 50cqi;
+  max-width: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: none;
+}
+/* Inner (spine) margin is narrower than the outer one, as in print. */
+.mushaf-spread .mushaf-frame[data-side='right'] {
+  padding-inline-end: calc(var(--mushaf-m) * 0.8);
+}
+.mushaf-spread .mushaf-frame[data-side='left'] {
+  padding-inline-start: calc(var(--mushaf-m) * 0.8);
+}
+.mushaf-spread .mushaf-body {
+  flex: 1 1 auto;
+}
+
+/* Right-hand page: outer edge = right (inline-start), spine = left. */
+.mushaf-spread > div:nth-child(1) .mushaf-frame {
+  border-radius: 0 4px 4px 0;
+}
+/* Left-hand page (its outer margin is on the left, via data-side). */
+.mushaf-spread > div:nth-child(2) .mushaf-frame {
+  border-radius: 4px 0 0 4px;
+}
+
+/* Gutter shading where each page curves into the spine. */
+.mushaf-spread .mushaf-frame::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  width: calc(var(--mushaf-m) * 1.5);
+  pointer-events: none;
+}
+.mushaf-spread > div:nth-child(1) .mushaf-frame::after {
+  left: 0;
+  background: linear-gradient(to right, var(--mushaf-gutter), transparent);
+}
+.mushaf-spread > div:nth-child(2) .mushaf-frame::after {
+  right: 0;
+  background: linear-gradient(to left, var(--mushaf-gutter), transparent);
+}
+
+/* ── Reader chrome tinted by the reader theme ─────────────────────────
+   The reader root carries data-reader-theme; header, bottom bar and pills
+   read these vars so the chrome belongs to the page (cream chrome over a
+   cream page, ink chrome at night) in every app palette. */
+.quran-reader {
+  --reader-bg: #efe8da;
+  --reader-chrome: rgba(251, 247, 238, 0.92);
+  --reader-ink: #1a2420;
+  --reader-muted: #6f6552;
+  --reader-accent: #7a5a14;
+  --reader-line: rgba(122, 90, 20, 0.16);
+  --reader-well: rgba(122, 90, 20, 0.08);
+  /* The surround is a quiet "desk": the page colour a shade darker and
+     greyer, a soft vignette, and a very faint girih lattice (::before), so
+     any margin beside the page(s) reads as designed, not empty. */
+  --reader-desk: color-mix(in srgb, var(--reader-bg) 90%, #7d7d7d);
+  isolation: isolate;
+  background: var(--reader-desk);
+  color: var(--reader-ink);
+  transition: background-color 0.3s ease;
+}
+/* The desk covers the whole window (the reader column itself is capped at
+   the app's max width on desktop). */
+.quran-reader::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 80% at 50% 45%, transparent 45%, color-mix(in srgb, var(--reader-ink) 7%, transparent) 100%),
+    var(--reader-desk);
+}
+.quran-reader::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--reader-accent);
+  opacity: 0.07;
+  -webkit-mask: var(--girih) repeat center / 96px 96px;
+  mask: var(--girih) repeat center / 96px 96px;
+}
+.quran-reader[data-reader-theme='night'],
+.quran-reader[data-reader-theme='black'],
+.quran-reader[data-reader-theme='dusk'] {
+  --reader-desk: color-mix(in srgb, var(--reader-bg) 94%, #000);
+}
+.quran-reader[data-reader-theme='night']::before,
+.quran-reader[data-reader-theme='black']::before,
+.quran-reader[data-reader-theme='dusk']::before {
+  opacity: 0.06;
+}
+.quran-reader[data-reader-theme='sepia'] {
+  --reader-bg: #e8d8b8;
+  --reader-chrome: rgba(246, 236, 214, 0.92);
+  --reader-ink: #2a2113;
+  --reader-muted: #6b5a3c;
+  --reader-accent: #5f4513;
+  --reader-line: rgba(95, 69, 19, 0.18);
+  --reader-well: rgba(95, 69, 19, 0.09);
+}
+.quran-reader[data-reader-theme='mint'] {
+  --reader-bg: #e3ede6;
+  --reader-chrome: rgba(244, 249, 245, 0.92);
+  --reader-ink: #13261e;
+  --reader-muted: #4b695c;
+  --reader-accent: #1d6a50;
+  --reader-line: rgba(29, 106, 80, 0.16);
+  --reader-well: rgba(29, 106, 80, 0.08);
+}
+.quran-reader[data-reader-theme='sand'] {
+  --reader-bg: #ede1ca;
+  --reader-chrome: rgba(249, 242, 229, 0.92);
+  --reader-ink: #2a2115;
+  --reader-muted: #6f5b3e;
+  --reader-accent: #6a4c16;
+  --reader-line: rgba(106, 76, 22, 0.17);
+  --reader-well: rgba(106, 76, 22, 0.08);
+}
+.quran-reader[data-reader-theme='night'] {
+  --reader-bg: #0e1d17;
+  --reader-chrome: rgba(20, 38, 31, 0.92);
+  --reader-ink: #e8f0ee;
+  --reader-muted: #a3b6ae;
+  --reader-accent: #e2c57a;
+  --reader-line: rgba(226, 197, 122, 0.16);
+  --reader-well: rgba(232, 240, 238, 0.07);
+}
+.quran-reader[data-reader-theme='black'] {
+  --reader-bg: #000;
+  --reader-chrome: rgba(14, 14, 14, 0.92);
+  --reader-ink: #ece6d2;
+  --reader-muted: #9b978b;
+  --reader-accent: #e2c57a;
+  --reader-line: rgba(226, 197, 122, 0.14);
+  --reader-well: rgba(236, 230, 210, 0.07);
+}
+.quran-reader[data-reader-theme='dusk'] {
+  --reader-bg: #111923;
+  --reader-chrome: rgba(27, 37, 51, 0.92);
+  --reader-ink: #e7ecf3;
+  --reader-muted: #9ba8b9;
+  --reader-accent: #e4cf98;
+  --reader-line: rgba(228, 207, 152, 0.15);
+  --reader-well: rgba(231, 236, 243, 0.07);
+}
+
+/* Chrome bars: slide away in immersive mode (transform/opacity only). */
+.reader-bar {
+  background: var(--reader-chrome);
+  color: var(--reader-ink);
+  -webkit-backdrop-filter: saturate(1.2) blur(14px);
+  backdrop-filter: saturate(1.2) blur(14px);
+  transition:
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease;
+}
+.reader-bar--top {
+  box-shadow: 0 1px 0 var(--reader-line);
+}
+.quran-reader[data-chrome='hidden'] .reader-bar--top {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reader-bar {
+    transition: opacity 0.15s ease;
+  }
+}
+
+/* Page slider — gold thumb on a hairline track, tinted per reader theme. */
+.reader-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+.reader-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to left,
+    var(--reader-accent) 0 var(--fill, 0%),
+    var(--reader-line) var(--fill, 0%) 100%
+  );
+}
+.reader-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 999px;
+  background: var(--reader-chrome);
+  border: 2px solid var(--reader-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.reader-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--reader-line);
+}
+.reader-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--reader-accent);
+}
+.reader-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--reader-chrome);
+  border: 2px solid var(--reader-accent);
+}
+
+/* Theme preview swatch in the reader settings — a miniature page painted by
+   the same --mushaf-* vars as the real one. */
+.reader-theme-swatch {
+  background: linear-gradient(180deg, var(--mushaf-bg-from), var(--mushaf-bg-to));
+  color: var(--mushaf-text);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--mushaf-gold) 70%, transparent),
+    inset 0 0 0 5px var(--mushaf-bg-from),
+    inset 0 0 0 6px color-mix(in srgb, var(--mushaf-gold) 45%, transparent);
+}
+
+/* Inside the reader (one top bar, no bottom bar) the global audio bar docks
+   at the screen bottom; the reader reserves its height so the page is never
+   covered (QuranReaderPage: useAudioDockHeight). */
+html[data-quran-reader] .audio-dock {
+  bottom: calc(var(--safe-bottom) + 0.5rem);
+  padding-inline-start: 0.75rem;
+}

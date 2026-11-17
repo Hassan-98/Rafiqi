@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «المسبحة» — an app card: dhikr name + «تصفير» chip, the big count in the accent colour, and the primary gradient «سبّح» button. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tb_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="rtl">
+
+    <ImageView android:id="@+id/tb_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" android:src="@drawable/wg_card" android:contentDescription="@null" />
+    <ImageView android:id="@+id/tb_ring" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" android:src="@drawable/wg_card_ring" android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView android:id="@+id/tb_star" android:layout_width="13dp" android:layout_height="13dp"
+                android:layout_marginEnd="6dp" android:src="@drawable/wg_star8" android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/tb_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="سبحان الله"
+                android:textColor="@color/wg_text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+            <FrameLayout
+                android:id="@+id/tb_reset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp">
+
+                <ImageView android:id="@+id/tb_reset_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:scaleType="fitXY" android:src="@drawable/wg_pill" android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/tb_reset_t"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:maxLines="1"
+                    android:text="@string/widget_reset"
+                    android:textColor="@color/wg_accent"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tb_count_box"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/tb_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="٠"
+                android:textColor="@color/wg_accent"
+                android:textSize="46sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tb_target"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/wg_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/tb_tick"
+            android:layout_width="match_parent"
+            android:layout_height="44dp">
+
+            <ImageView android:id="@+id/tb_tick_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:scaleType="fitXY" android:src="@drawable/wg_hero" android:contentDescription="@null" />
+            <ImageView android:id="@+id/tb_tick_glow" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:scaleType="fitXY" android:src="@drawable/wg_hero_glow" android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/tb_tick_t"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="سبّح"
+                android:textColor="@color/wg_on_accent"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

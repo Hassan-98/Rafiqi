@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «صلوات اليوم» — painted into card_img by CardPainter (DAY). Overlays: the live countdown
+     (Chronometer, placed via the box padding), five tap cells over the prayer nodes (log the
+     fard) and five over the «أذكار» pills (mark the adhkar). RTL: الفجر on the right. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/card_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/card_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/widget_today_prayers_label" />
+
+    <FrameLayout
+        android:id="@+id/card_chrono_box"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layoutDirection="ltr">
+
+        <Chronometer
+            android:id="@+id/card_chrono"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|left"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FFE6CD8F"
+            android:textDirection="ltr"
+            android:textSize="22dp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/card_cols"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layoutDirection="rtl"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <FrameLayout android:id="@+id/card_col0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_col1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_col2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_col3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_col4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/card_pills"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layoutDirection="rtl"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <FrameLayout android:id="@+id/card_pill0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_pill1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_pill2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_pill3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        <FrameLayout android:id="@+id/card_pill4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+    </LinearLayout>
+</FrameLayout>

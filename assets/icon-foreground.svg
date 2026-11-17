@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFEFC2" stop-opacity="0.9"/>
+      <stop offset="48%" stop-color="#FFD980" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFD980" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F4DD93"/>
+      <stop offset="55%" stop-color="#E2C57A"/>
+      <stop offset="100%" stop-color="#C99B3F"/>
+    </linearGradient>
+    <!-- Crescent = big disc minus an offset disc -->
+    <mask id="crescent">
+      <rect width="1024" height="1024" fill="black"/>
+      <circle cx="476" cy="512" r="212" fill="white"/>
+      <circle cx="572" cy="468" r="180" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- warm glow halo -->
+  <ellipse cx="512" cy="500" rx="300" ry="310" fill="url(#glow)"/>
+
+  <!-- crescent moon -->
+  <circle cx="476" cy="512" r="212" fill="url(#gold)" mask="url(#crescent)"/>
+
+  <!-- five-pointed star nestled in the crescent's opening -->
+  <path
+    d="M668 386 L686.4 438.1 L741.6 439.5 L697.6 472.9 L713.9 526.2 L668 494.9 L622.1 526.2 L638.4 472.9 L594.4 439.5 L649.6 438.1 Z"
+    fill="url(#gold)"/>
+
+  <!-- tiny sparkles -->
+  <g fill="#F4DD93">
+    <path d="M360 372 l7 17 17 7 -17 7 -7 17 -7 -17 -17 -7 17 -7 Z"/>
+    <path d="M392 648 l6 14 14 6 -14 6 -6 14 -6 -14 -14 -6 14 -6 Z"/>
+  </g>
+</svg>

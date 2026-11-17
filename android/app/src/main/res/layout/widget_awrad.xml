@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «ورد وقيام» — tonight's قيام on a tinted tile (done / last-third time), then up to three active أوراد with their counts. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/aw_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="rtl">
+
+    <ImageView android:id="@+id/aw_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/wg_card" android:contentDescription="@null" />
+    <ImageView android:id="@+id/aw_ring" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/wg_card_ring" android:contentDescription="@null" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <ImageView android:id="@+id/aw_star" android:layout_width="13dp" android:layout_height="13dp"
+                android:layout_marginEnd="6dp" android:src="@drawable/wg_star8" android:contentDescription="@null" />
+            <TextView
+        android:id="@+id/aw_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_awrad_label"
+        android:textColor="@color/wg_text"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_weight="1" />
+            <TextView
+        android:id="@+id/aw_summary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_accent"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/aw_qiyam"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+            <ImageView android:id="@+id/aw_qiyam_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/wg_tile" android:contentDescription="@null" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
+                <TextView
+        android:id="@+id/aw_qiyam_t"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_dash_qiyam"
+        android:textColor="@color/wg_text"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:layout_weight="1" />
+                <TextView
+        android:id="@+id/aw_qiyam_s"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_accent"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/aw_list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
+            <LinearLayout
+                android:id="@+id/aw_row_0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+                <ImageView android:id="@+id/aw_dot_0" android:layout_width="7dp" android:layout_height="7dp"
+                    android:layout_marginEnd="8dp" android:src="@drawable/wg_circle" android:contentDescription="@null" />
+                <TextView
+        android:id="@+id/aw_title_0"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_text"
+        android:textSize="13sp"
+        android:layout_weight="1" />
+                <TextView
+        android:id="@+id/aw_count_0"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_muted"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:paddingStart="6dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/aw_row_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+                <ImageView android:id="@+id/aw_dot_1" android:layout_width="7dp" android:layout_height="7dp"
+                    android:layout_marginEnd="8dp" android:src="@drawable/wg_circle" android:contentDescription="@null" />
+                <TextView
+        android:id="@+id/aw_title_1"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_text"
+        android:textSize="13sp"
+        android:layout_weight="1" />
+                <TextView
+        android:id="@+id/aw_count_1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_muted"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:paddingStart="6dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/aw_row_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+                <ImageView android:id="@+id/aw_dot_2" android:layout_width="7dp" android:layout_height="7dp"
+                    android:layout_marginEnd="8dp" android:src="@drawable/wg_circle" android:contentDescription="@null" />
+                <TextView
+        android:id="@+id/aw_title_2"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_text"
+        android:textSize="13sp"
+        android:layout_weight="1" />
+                <TextView
+        android:id="@+id/aw_count_2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/wg_muted"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:paddingStart="6dp" />
+            </LinearLayout>
+            <TextView
+        android:id="@+id/aw_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_awrad_empty"
+        android:textColor="@color/wg_muted"
+        android:textSize="12sp"
+        android:gravity="center" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- Android status-bar icon: pure white silhouette on transparent.
+       Bold crescent + star so it reads at 24dp. -->
+  <defs>
+    <mask id="cres">
+      <rect width="96" height="96" fill="black"/>
+      <circle cx="44" cy="48" r="27" fill="white"/>
+      <circle cx="57" cy="42" r="23" fill="black"/>
+    </mask>
+  </defs>
+  <circle cx="44" cy="48" r="27" fill="#FFFFFF" mask="url(#cres)"/>
+  <path d="M67 33 L70 41.6 L79.1 41.8 L71.8 47.3 L74.5 56 L67 50.8 L59.5 56 L62.2 47.3 L54.9 41.8 L64 41.6 Z" fill="#FFFFFF"/>
+</svg>

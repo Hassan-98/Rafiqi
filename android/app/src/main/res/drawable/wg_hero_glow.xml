@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent → opaque diagonal; tinted to `heroTo` over wg_hero it gives the app's
+     accent gradient (dark top-start → light bottom-end). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="315" android:startColor="#001F8D71" android:endColor="#FF1F8D71" />
+    <corners android:radius="22dp" />
+</shape>

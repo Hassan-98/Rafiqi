@@ -1,0 +1,34 @@
+[package]
+name = "rafiqi"
+# The app's version is package.json's (tauri.conf.json "version") — this one is unused.
+version = "0.0.0"
+description = "رَفِيقِي — desktop shell"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "rafiqi_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.5", features = [] }
+
+[dependencies]
+# devtools: F12 in release builds too, as the Electron shell had.
+tauri = { version = "2.12.6", features = ["devtools"] }
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+percent-encoding = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

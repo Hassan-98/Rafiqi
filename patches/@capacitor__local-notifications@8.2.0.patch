@@ -1,0 +1,116 @@
+diff --git a/android/src/main/java/com/capacitorjs/plugins/localnotifications/LocalNotificationManager.java b/android/src/main/java/com/capacitorjs/plugins/localnotifications/LocalNotificationManager.java
+index 0b826a5464a14aca12b3c66df2a491d292b71e5b..4b5c97f23064cadce7018e992285e21fa2e5f471 100644
+--- a/android/src/main/java/com/capacitorjs/plugins/localnotifications/LocalNotificationManager.java
++++ b/android/src/main/java/com/capacitorjs/plugins/localnotifications/LocalNotificationManager.java
+@@ -71,8 +71,15 @@ public class LocalNotificationManager {
+             return null;
+         }
+         boolean isRemovable = data.getBooleanExtra(LocalNotificationManager.NOTIFICATION_IS_REMOVABLE_KEY, true);
++        // [myzikr patch] series display id from the notification's own source JSON
++        // (storage no longer has fired one-shots).
++        int displayId = notificationId;
++        try {
++            String src = data.getStringExtra(LocalNotificationManager.NOTIFICATION_OBJ_INTENT_KEY);
++            if (src != null) displayId = NotificationStorage.displayIdOf(new JSObject(src), notificationId);
++        } catch (JSONException e) {}
+         if (isRemovable) {
+-            notificationStorage.deleteNotification(Integer.toString(notificationId));
++            notificationStorage.deleteIfOneShot(Integer.toString(notificationId)); // [myzikr patch]
+         }
+         JSObject dataJson = new JSObject();
+ 
+@@ -84,6 +91,7 @@ public class LocalNotificationManager {
+         String menuAction = data.getStringExtra(LocalNotificationManager.ACTION_INTENT_KEY);
+ 
+         dismissVisibleNotification(notificationId);
++        if (displayId != notificationId) dismissVisibleNotification(displayId); // [myzikr patch]
+ 
+         dataJson.put("actionId", menuAction);
+         JSONObject request = null;
+@@ -239,7 +247,11 @@ public class LocalNotificationManager {
+                 JSObject notificationJson = new JSObject(localNotification.getSource());
+                 LocalNotificationsPlugin.fireReceived(notificationJson);
+             } catch (JSONException e) {}
+-            notificationManager.notify(localNotification.getId(), buildNotification);
++            int displayId = localNotification.getId();
++            try {
++                displayId = NotificationStorage.displayIdOf(new JSObject(localNotification.getSource()), displayId); // [myzikr patch]
++            } catch (JSONException e) {}
++            notificationManager.notify(displayId, buildNotification);
+         }
+     }
+ 
+diff --git a/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationDismissReceiver.java b/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationDismissReceiver.java
+index c29cbb19a9b934154e39e56fad2dc2091baa3e02..cbf30f7b6d0cc5ba139cdded6e4c4d6c880f32ae 100644
+--- a/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationDismissReceiver.java
++++ b/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationDismissReceiver.java
+@@ -20,7 +20,7 @@ public class NotificationDismissReceiver extends BroadcastReceiver {
+         boolean isRemovable = intent.getBooleanExtra(LocalNotificationManager.NOTIFICATION_IS_REMOVABLE_KEY, true);
+         if (isRemovable) {
+             NotificationStorage notificationStorage = new NotificationStorage(context);
+-            notificationStorage.deleteNotification(Integer.toString(intExtra));
++            notificationStorage.deleteIfOneShot(Integer.toString(intExtra)); // [myzikr patch]
+         }
+     }
+ }
+diff --git a/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationStorage.java b/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationStorage.java
+index 74ab38faf48a2f11d94926eec83d4b65f8625988..e4ef8a1e83d322676c6266ea2d8180345b21131f 100644
+--- a/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationStorage.java
++++ b/android/src/main/java/com/capacitorjs/plugins/localnotifications/NotificationStorage.java
+@@ -9,6 +9,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import org.json.JSONException;
++import org.json.JSONObject;
+ 
+ /**
+  * Class used to abstract storage for notification data
+@@ -129,6 +130,30 @@ public class NotificationStorage {
+         return notification;
+     }
+ 
++    /**
++     * [myzikr patch] Display id for a stored notification: `extra.displayId`
++     * (one stable id per reminder SERIES, so each new fire REPLACES the previous
++     * one in the shade instead of stacking), else the notification's own id.
++     */
++    public static int displayIdOf(JSONObject source, int fallback) {
++        if (source == null) return fallback;
++        JSONObject extra = source.optJSONObject("extra");
++        if (extra == null || !extra.has("displayId")) return fallback;
++        return extra.optInt("displayId", fallback);
++    }
++
++    /**
++     * [myzikr patch] Forget a notification after a tap/swipe ONLY if it is a
++     * one-shot. Upstream deleted repeating ones too, so a swiped daily reminder
++     * vanished from getPending() and was not restored after a reboot.
++     */
++    public void deleteIfOneShot(String id) {
++        JSObject json = getSavedNotificationAsJSObject(id);
++        JSONObject schedule = json == null ? null : json.optJSONObject("schedule");
++        boolean repeating = schedule != null && (schedule.optBoolean("repeats", false) || schedule.has("on") || schedule.has("every"));
++        if (!repeating) deleteNotification(id);
++    }
++
+     /**
+      * Remove the stored notifications
+      */
+diff --git a/android/src/main/java/com/capacitorjs/plugins/localnotifications/TimedNotificationPublisher.java b/android/src/main/java/com/capacitorjs/plugins/localnotifications/TimedNotificationPublisher.java
+index 0a5c0add0e7cc3416cce47725de4f9355e3c77ca..22c33c1dfce4f373b8b3160d329dc46996ae849a 100644
+--- a/android/src/main/java/com/capacitorjs/plugins/localnotifications/TimedNotificationPublisher.java
++++ b/android/src/main/java/com/capacitorjs/plugins/localnotifications/TimedNotificationPublisher.java
+@@ -46,7 +46,12 @@ public class TimedNotificationPublisher extends BroadcastReceiver {
+         NotificationStorage storage = new NotificationStorage(context);
+         JSObject notificationJson = storage.getSavedNotificationAsJSObject(Integer.toString(id));
+         LocalNotificationsPlugin.fireReceived(notificationJson);
+-        notificationManager.notify(id, notification);
++        // [myzikr patch] Post under the SERIES display id; cancel first so a
++        // still-visible older fire is replaced AND the new one alerts again
++        // (the builder sets onlyAlertOnce, which silences plain updates).
++        int displayId = NotificationStorage.displayIdOf(notificationJson, id);
++        notificationManager.cancel(displayId);
++        notificationManager.notify(displayId, notification);
+         if (!rescheduleNotificationIfNeeded(context, intent, id)) {
+             storage.deleteNotification(Integer.toString(id));
+         }

@@ -1,0 +1,21 @@
+node_modules
+supabase/migrations
+.env
+.env.example
+dist
+.tmp-*
+.vscode
+.archive
+.github
+.claude
+android/app/build
+
+# Build outputs — installers, the unpacked Electron app, OTA bundles (rebuilt by
+# pnpm desktop:build / scripts/pack-update.mjs). Kept: the Electron source backup
+# and the update host's Vercel config.
+release/*
+!release/electron-shell-backup/
+!release/updates/
+release/updates/*
+!release/updates/vercel.json
+!release/updates/.gitignore

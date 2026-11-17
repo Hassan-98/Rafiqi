@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: core IPC + notifications (the plugin replaces window.Notification).",
+  "windows": ["main"],
+  "permissions": ["core:default", "notification:default"]
+}

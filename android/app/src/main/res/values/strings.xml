@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">رَفِيقِي</string>
+    <string name="title_activity_main">رَفِيقِي</string>
+    <string name="package_name">com.darkmon.myzikr</string>
+    <string name="custom_url_scheme">com.darkmon.myzikr</string>
+
+    <!-- Home-screen widgets -->
+    <string name="widget_next_prayer_label">الصلاة القادمة</string>
+    <string name="widget_next_prayer_title">رَفِيقِي — الصلاة القادمة</string>
+    <string name="widget_prayer_times_title">مواقيت الصلاة</string>
+    <string name="widget_prayer_times_widget_title">رَفِيقِي — مواقيت الصلاة</string>
+    <string name="widget_today_prayers_label">صلوات اليوم</string>
+    <string name="widget_today_prayers_title">رَفِيقِي — صلوات اليوم</string>
+    <string name="widget_today_prayers_desc">صلوات اليوم — سجّل الفروض وأذكار الصلاة</string>
+    <string name="widget_progress_label">إنجاز اليوم</string>
+    <string name="widget_progress_title">رَفِيقِي — إنجاز اليوم</string>
+    <string name="widget_tasbeeh_title">رَفِيقِي — المسبحة</string>
+    <string name="widget_reset">تصفير</string>
+    <string name="widget_no_location">حدّد موقعك في التطبيق</string>
+
+    <!-- «مهامي» (persistent list) -->
+    <string name="widget_tasks_title">رَفِيقِي — مهامي</string>
+    <string name="widget_tasks_desc">قائمة مهامك الدائمة مع إنجازها بلمسة، وإضافة مهمة جديدة</string>
+    <string name="widget_tasks_label">مهامي</string>
+    <string name="widget_tasks_empty">لا مهام بعد — اضغط + لإضافة مهمة</string>
+    <string name="widget_tasks_add">إضافة مهمة</string>
+    <string name="widget_tasks_toggle">إنجاز المهمة</string>
+
+    <!-- «الدرس القادم» -->
+    <string name="widget_study_title">رَفِيقِي — الدرس القادم</string>
+    <string name="widget_study_desc">موعد درسك القادم مع عدّ تنازلي وفتح رابط الحلقة مباشرة</string>
+    <string name="widget_study_label">الدرس القادم</string>
+    <string name="widget_study_none">لا دروس قادمة</string>
+    <string name="widget_study_open">افتح الرابط</string>
+    <string name="widget_study_live">مباشر الآن</string>
+    <string name="widget_study_started">حان موعد الدرس</string>
+
+    <!-- «يومي» -->
+    <string name="widget_dash_title">رَفِيقِي — يومي</string>
+    <string name="widget_dash_desc">الصلاة القادمة وإنجاز اليوم والمهام، مع اختصارات الأذكار والقيام والقرآن والتسبيح</string>
+    <string name="widget_dash_tasks">المهام</string>
+    <string name="widget_dash_adhkar">الأذكار</string>
+    <string name="widget_dash_qiyam">قيام الليل</string>
+    <string name="widget_dash_quran">القرآن</string>
+    <string name="widget_dash_quran_sub">الورد</string>
+    <string name="widget_dash_tasbih">التسبيح</string>
+
+    <!-- Section widgets: calendar, Quran, adhkar, ورد وقيام -->
+    <string name="widget_calendar_title">رَفِيقِي — التاريخ والتقويم</string>
+    <string name="widget_calendar_desc">بطاقة «اليوم في التقويم»: التاريخ الهجري والميلادي، ومناسبة اليوم والقادمة — يفتح التقويم</string>
+    <string name="widget_quran_title">رَفِيقِي — القرآن</string>
+    <string name="widget_quran_desc">ختمتك الحالية وتقدّمك فيها ووردك اليوم، ومتابعة القراءة بلمسة</string>
+    <string name="widget_adhkar_title">رَفِيقِي — الأذكار</string>
+    <string name="widget_adhkar_desc">أذكار الوقت الحالي وتقدّمك فيها، مع اختصارات الصباح والمساء وبعد الصلاة والنوم</string>
+    <string name="widget_awrad_title">رَفِيقِي — ورد وقيام</string>
+    <string name="widget_awrad_desc">قيام الليلة ووقت الثلث الأخير، وأورادك النشطة وما أنجزت منها</string>
+    <string name="widget_calendar_open">افتح التطبيق لعرض التاريخ الهجري</string>
+    <string name="widget_awrad_label">وِرد وقيام</string>
+    <string name="widget_awrad_empty">لا أوراد نشطة — أنشئ وِردك الأول</string>
+</resources>
