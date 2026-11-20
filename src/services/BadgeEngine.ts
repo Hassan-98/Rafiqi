@@ -182,7 +182,7 @@ export function evaluateBadges(metrics: BadgeMetrics = currentBadgeMetrics()): B
     useBadgeCelebrationStore.setState({ queue: [...cel.queue, { ids: won.map((x) => x.id), levelRank }] });
   } else {
     toast.success(won.length > 1 ? `${toArabicDigits(won.length)} أوسمة جديدة` : 'وسام جديد', won[0].titleAr);
-    if (levelRank) toast.success(`ارتقيتَ إلى مستوى «${levelAfter.titleAr}»`, 'بارك الله في مداومتك');
+    if (levelRank) toast.success(`ارتقيتَ إلى المستوى ${toArabicDigits(levelAfter.rank)}`, 'بارك الله في مداومتك');
   }
   void hapticsService.notify('success');
   return won;

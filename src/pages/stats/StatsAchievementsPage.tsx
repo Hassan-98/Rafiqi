@@ -190,8 +190,8 @@ export function StatsAchievementsPage() {
         }
         tiles={[
           {
-            value: levelFor(badgePoints(unlocked, gender)).level.titleAr,
-            label: `المستوى · ${toArabicDigits(badgePoints(unlocked, gender))} نقطة`,
+            value: toArabicDigits(levelFor(badgePoints(unlocked, gender)).level.rank),
+            label: `المستوى، ${toArabicDigits(badgePoints(unlocked, gender))} نقطة`,
           },
           {
             value: stats.lastUnlock ? formatArabicDate(dateKeyOf(stats.lastUnlock)) : '—',

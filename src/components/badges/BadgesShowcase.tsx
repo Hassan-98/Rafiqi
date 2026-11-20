@@ -26,7 +26,7 @@ export function BadgesShowcase() {
         <div className="min-w-0 flex-1">
           <p className="text-[11px] text-gold-light/85">خزانة الأوسمة</p>
           <p className="font-display text-lg font-bold leading-tight text-text-on-dark truncate">
-            المستوى {toArabicDigits(lvl.level.rank)}، «{lvl.level.titleAr}»
+            المستوى {toArabicDigits(lvl.level.rank)}
           </p>
           <div className="mt-1.5 h-1.5 rounded-full bg-white/10 overflow-hidden">
             <div className="h-full rounded-full bg-[image:var(--gradient-gold)]" style={{ width: `${lvl.pct}%` }} />

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useParams, useSearchParams } from 'react-router';
-import { format, subDays } from 'date-fns';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { format, startOfWeek, subDays } from 'date-fns';
 import { surahs } from '@/data/surahs';
-import { BookOpen, Brain, Check, ChevronLeft, Flame, Headphones, Link2, RefreshCw, Repeat, Sprout, Unlink, type LucideIcon } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, ChevronLeft, Flame, Headphones, Link2, RefreshCw, Repeat, Sprout, Unlink, type LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Medallion, SectionTitle, ArchMotif } from '@/components/ui/Ornament';
@@ -10,20 +10,23 @@ import { TextInput } from '@/components/ui/TextInput';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { StatTile } from '@/components/stats/StatTile';
+import { BarChart } from '@/components/stats/BarChart';
 import { BadgeCategoryStrip } from '@/components/badges/BadgeCategoryStrip';
 import { BadgeEmblem } from '@/components/badges/BadgeEmblem';
 import { leftFor } from '@/components/badges/badgeUi';
 import { TodayChallenges } from '@/components/badges/TodayChallenges';
 import { useBadgeModel } from '@/services/BadgeEngine';
-import { computeStreakFromActiveDates } from '@/services/statsService';
+import { computeStreakFromActiveDates, WEEKDAY_SHORT_AR } from '@/services/statsService';
 import { QURAN_TYPE_IDS, QURAN_TYPES, type QuranType } from '@/data/quranTypes';
 import type { BadgeMetric } from '@/data/badges';
 import { StatsShortcut } from '@/components/stats/StatsShortcut';
 import { GroupsHomeCard } from '@/components/groups/GroupsHomeCard';
 import {
+  ayahKey,
   khatmaState,
   mushafiToday,
   normalizeMushafiCode,
+  pageOfAyah,
   prettyMushafiCode,
   quranTypeStats,
   sessionCredit,
@@ -32,19 +35,31 @@ import {
   type KhatmaState,
   type MushafiToday,
   type SessionItem,
-  type SessionStats,
   type SessionType,
   type TypeStats,
 } from '@/store/mushafiStore';
 import { useQuranStore } from '@/store/quranStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { openMushafi, pullMushafi } from '@/services/mushafi';
-import { hifzModel, rangeTxt } from '@/services/hifzModel';
+import { hifzModel, rangeTxt, type HifzModel } from '@/services/hifzModel';
 import { toast } from '@/store/toastStore';
 import { toArabicDigits } from '@/utils/arabicFormat';
 
 const ar = toArabicDigits;
 const pagesTxt = (n: number) => (n === 1 ? 'صفحة واحدة' : n === 2 ? 'صفحتان' : n <= 10 ? `${ar(n)} صفحات` : `${ar(n)} صفحة`);
+const khatmasTxt = (n: number) => (n === 1 ? 'ختمة واحدة' : n === 2 ? 'ختمتين' : n <= 10 ? `${ar(n)} ختمات` : `${ar(n)} ختمة`);
+const runningTxt = (n: number) => (n === 1 ? 'ختمة جارية' : n === 2 ? 'ختمتان جاريتان' : n <= 10 ? `${ar(n)} ختمات جارية` : `${ar(n)} ختمة جارية`);
+// Never «·» beside a digit: it reads as the Arabic zero «٠» (owner) — «،» there.
+const daysTxt = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n <= 10 ? `${ar(n)} أيام` : `${ar(n)} يوماً`);
+/** Pages by ayat can be a fraction: one decimal under ten. */
+const num = (n: number) => (n >= 10 || Number.isInteger(n) ? ar(Math.round(n)) : ar(Math.round(n * 10) / 10).replace('.', '٫'));
+const minutesTxt = (m: number) => {
+  const h = Math.floor(m / 60);
+  const r = Math.round(m % 60);
+  return h ? `${ar(h)} س${r ? ` ${ar(r)} د` : ''}` : `${ar(r)} د`;
+};
+const dk = (d: Date | number) => format(d, 'yyyy-MM-dd');
+const KAHF = surahs[17].pages;
 
 function agoTxt(t: number | null): string {
   if (!t) return 'لم تتم بعد';
@@ -56,9 +71,12 @@ function agoTxt(t: number | null): string {
 }
 
 /**
- * «القرآن» — the Quran is read in «مصحفي» (a separate app); this tab links to
- * it, opens it, and shows what its sync brought back: today's wird and the
- * khatmas. Stats, badges and reminders read the same record.
+ * «القرآن» — the Quran is read in «مصحفي» (a separate app); this tab links to it,
+ * opens it, and shows what its sync brought back. Redesigned 2026-11-20 (owner: «عشوائية»,
+ * the hifz and sessions boxes stranded at the bottom): one night hero for today's wird,
+ * then «خطة اليوم» — every khatma's portion, the hifz review, new hifz and الكهف on
+ * Friday in ONE checklist — then the khatmas, the hifz map, the week by type and the
+ * latest sessions. Stats, badges and reminders read the same record.
  */
 export function QuranPage() {
   const code = useMushafiStore((s) => s.code);
@@ -68,9 +86,7 @@ export function QuranPage() {
         <div className="min-w-0">
           <p className="text-xs text-text-muted">كتاب الله</p>
           <h1 className="text-[26px] font-display font-bold text-text-primary dark:text-text-on-dark text-balance">القرآن الكريم</h1>
-          <p className="text-[13px] text-text-secondary dark:text-text-on-dark/70 text-pretty">
-            تقرأ في مصحفي، ويصل تقدّمك إلى هنا
-          </p>
+          <p className="text-[13px] text-text-secondary dark:text-text-on-dark/70 text-pretty">تقرأ في مصحفي، ويصل تقدّمك إلى هنا</p>
         </div>
         <div className="shrink-0 pt-1">
           <StatsShortcut to="/stats/quran" label="إحصاءات القرآن" />
@@ -134,11 +150,7 @@ function LinkCard() {
           </div>
         </div>
         <ol className="relative mt-4 flex flex-col gap-1.5 text-[12.5px] text-text-secondary dark:text-text-on-dark/80">
-          {[
-            'افتح مصحفي، ثم «الإعدادات»',
-            'في «المزامنة بين أجهزتك» اضغط «إنشاء رمز جديد»، أو «نسخ» إن كان لك رمز',
-            'ألصق الرمز هنا',
-          ].map((t, i) => (
+          {['افتح مصحفي، ثم «الإعدادات»', 'في «المزامنة بين أجهزتك» اضغط «إنشاء رمز جديد»، أو «نسخ» إن كان لك رمز', 'ألصق الرمز هنا'].map((t, i) => (
             <li key={t} className="flex items-start gap-2">
               <span className="w-5 h-5 rounded-full bg-teal/12 text-teal dark:text-teal-light text-[11px] font-counter inline-flex items-center justify-center shrink-0 mt-px">
                 {ar(i + 1)}
@@ -183,6 +195,7 @@ function LinkCard() {
 }
 
 function Linked({ code }: { code: string }) {
+  const navigate = useNavigate();
   const days = useMushafiStore((s) => s.days);
   const khatmas = useMushafiStore((s) => s.khatmas);
   const marks = useMushafiStore((s) => s.marks);
@@ -190,18 +203,22 @@ function Linked({ code }: { code: string }) {
   const sessions = useMushafiStore((s) => s.sessions);
   const setCode = useMushafiStore((s) => s.setCode);
   const fallback = useSettingsStore((s) => s.quranDailyTarget);
+  const cycle = useSettingsStore((s) => s.hifzCycle);
+  const weekly = useSettingsStore((s) => s.hifzWeekly);
   const legacyWird = useQuranStore((s) => s.wird);
   const [unlink, setUnlink] = useState(false);
   const [typeOpen, setTypeOpen] = useState<QuranType | null>(null);
 
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const now = Date.now();
+  const today = dk(now);
   const t = useMemo(
     () => mushafiToday(days, khatmas, marks, today, legacyWird?.unit === 'page' ? legacyWird.amount : fallback),
     [days, khatmas, marks, today, fallback, legacyWird],
   );
   const types = useMemo(() => quranTypeStats(days, khatmas, marks, today, tops), [days, khatmas, marks, today, tops]);
   const ses = useMemo(() => sessionStats(sessions), [sessions]);
-  // Sessions' pages per day in the type they belong to (reading → تلاوة, review → مراجعة) — beyond the khatmas'.
+  const m = hifzModel(sessions, now, cycle); // cached per minute inside
+  // Sessions' pages per day in the type they belong to (reading → تلاوة, hifz/review → مراجعة) — beyond the khatmas'.
   const sesDays = useMemo(() => {
     const out = Object.fromEntries(QURAN_TYPE_IDS.map((ty) => [ty, {}])) as Record<QuranType, Record<string, number>>;
     for (const x of ses.items) {
@@ -211,20 +228,17 @@ function Linked({ code }: { code: string }) {
     }
     return out;
   }, [ses, types]);
-  const all = useMemo(
-    () =>
-      khatmas
-        .map((k) => khatmaState(k, marks, today))
-        .sort((a, b) => Number(b.live) - Number(a.live) || b.owe - a.owe),
-    [khatmas, marks, today],
-  );
+  /** The last seven days, oldest first: pages counted per type — the same pages the points count. */
   const week = useMemo(() => {
-    const keys = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), 'yyyy-MM-dd'));
-    const byType = Object.fromEntries(
-      QURAN_TYPE_IDS.map((ty) => [ty, Math.round(keys.reduce((n, k) => n + (types[ty].days[k] ?? 0) + (sesDays[ty][k] ?? 0), 0))]),
-    ) as Record<QuranType, number>;
-    return { pages: keys.reduce((n, k) => n + (days[k]?.length ?? 0), 0), byType };
-  }, [days, types, sesDays]);
+    const keys = Array.from({ length: 7 }, (_, i) => dk(subDays(new Date(), 6 - i)));
+    const of = (ty: QuranType, k: string) => (types[ty].days[k] ?? 0) + (sesDays[ty][k] ?? 0);
+    return {
+      keys,
+      perDay: keys.map((k) => QURAN_TYPE_IDS.reduce((n, ty) => n + of(ty, k), 0)),
+      byType: Object.fromEntries(QURAN_TYPE_IDS.map((ty) => [ty, keys.reduce((n, k) => n + of(ty, k), 0)])) as Record<QuranType, number>,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- today re-keys the week at midnight
+  }, [types, sesDays, today]);
   const streaks = useMemo(() => {
     const of = (keys: string[]) => computeStreakFromActiveDates(keys).current;
     return {
@@ -234,38 +248,85 @@ function Linked({ code }: { code: string }) {
       ) as Record<QuranType, number>,
     };
   }, [days, types, ses, sesDays]);
+  const all = useMemo(() => khatmas.filter((k) => !k.del).map((k) => khatmaState(k, marks, today)), [khatmas, marks, today]);
+  const running = all.filter((s) => s.live).sort((a, b) => b.owe - a.owe);
+  const finished = all.filter((s) => !s.live).sort((a, b) => (b.finished ?? '').localeCompare(a.finished ?? ''));
+
+  // ── «خطة اليوم»: each khatma's portion, the review, new hifz, الكهف on Friday ──
+  const plan: PlanItem[] = t.live.map((s) => ({
+    id: s.id,
+    Icon: QURAN_TYPES[s.type].Icon,
+    title: s.name,
+    sub: `${QURAN_TYPES[s.type].label}${s.owe > 0 ? ` · من ص ${ar(s.next)} إلى ${ar(s.end)}` : ''}${s.late ? `، منها ${ar(s.late)} فاتتك` : ''}`,
+    done: s.owe === 0,
+    status: s.owe === 0 ? 'تمّ' : `بقي ${ar(s.owe)} ص`,
+    frac: s.share > 0 ? (s.share - Math.min(s.owe, s.share)) / s.share : 1,
+    onOpen: () => void openMushafi(s.next),
+  }));
+  if (m.held > 0) {
+    const r = m.today;
+    const size = (rs: { from: number; to: number }[]) => rs.reduce((n, x) => n + x.to - x.from + 1, 0);
+    const near = size(r.recent);
+    const far = size(r.far);
+    plan.push({
+      id: 'review',
+      Icon: Repeat,
+      title: 'مراجعة الحفظ',
+      sub: r.left
+        ? [near ? `القريب ${pagesTxt(near)}` : '', far ? `البعيد ${pagesTxt(far)}` : '', r.late ? `منها ${ar(r.late)} متأخرة` : ''].filter(Boolean).join(' · ')
+        : r.done
+          ? `راجعت اليوم ${pagesTxt(r.done)}، بارك الله فيك`
+          : 'لا مراجعة عليك اليوم',
+      done: r.left === 0,
+      status: r.left === 0 ? 'تمّ' : `بقي ${num(r.left)} ص`,
+      frac: r.done + r.left > 0 ? r.done / (r.done + r.left) : 1,
+      onOpen: () => navigate('/hifz'),
+    });
+  }
+  if (m.held < 604 && (weekly > 0 || m.next != null)) {
+    const weekFrom = dk(startOfWeek(now, { weekStartsOn: 6 }));
+    let fresh = 0;
+    for (const [d, v] of m.days) if (d >= weekFrom) fresh += v.fresh;
+    const freshToday = m.days.get(today)?.fresh ?? 0;
+    const next = m.next != null ? ayahKey(m.next) : null;
+    const nextTxt = next ? `${surahs[next[0] - 1].nameArabic} من الآية ${ar(next[1])}` : '';
+    const goal = weekly > 0;
+    plan.push({
+      id: 'hifz',
+      Icon: Sprout,
+      title: goal ? 'الحفظ الجديد · هدف الأسبوع' : 'الحفظ الجديد',
+      sub: nextTxt ? `التالي: ${nextTxt}` : 'ابدأ من حيث شئت',
+      done: goal ? fresh >= weekly : freshToday > 0,
+      status: goal ? (fresh >= weekly ? 'تمّ' : `${num(fresh)} من ${ar(weekly)} ص`) : freshToday > 0 ? 'تمّ' : m.next != null ? `ص ${ar(pageOfAyah(m.next))}` : '',
+      frac: goal ? fresh / weekly : freshToday > 0 ? 1 : 0,
+      onOpen: () => navigate('/hifz'),
+    });
+  }
+  if (new Date(now).getDay() === 5) {
+    const read = days[today] ?? [];
+    const kahf = ses.kahfFridays.has(today) || Array.from({ length: KAHF[1] - KAHF[0] + 1 }, (_, i) => KAHF[0] + i).every((p) => read.includes(p));
+    plan.push({
+      id: 'kahf',
+      Icon: BookOpen,
+      title: 'سورة الكهف',
+      sub: 'من سنن يوم الجمعة',
+      done: kahf,
+      status: kahf ? 'تمّ' : `ص ${ar(KAHF[0])}`,
+      frac: kahf ? 1 : 0,
+      onOpen: () => void openMushafi(KAHF[0]),
+    });
+  }
 
   return (
     <>
-      <TodayWird t={t} weekPages={week.pages} />
-      <StreakStrip any={streaks.any} byType={streaks.byType} types={types} />
+      <Hero t={t} today={week.perDay[6]} weekPages={week.perDay.reduce((a, b) => a + b, 0)} streak={streaks.any} />
+      <TodayPlan items={plan} />
+      <Khatmas running={running} finished={finished} />
+      <HifzPanel m={m} now={now} />
+      <WeekSection keys={week.keys} perDay={week.perDay} byType={week.byType} streaks={streaks.byType} types={types} onType={setTypeOpen} />
+      <RecentSessions items={ses.items} now={now} />
       <GroupsHomeCard khatma />
       <TodayChallenges only={['quran_wird_days', 'day_quran_share']} />
-
-      <section className="flex flex-col gap-3">
-        <SectionTitle title="نصيبك من القرآن" subtitle="لكل نوع من الختمات فضله وسرعته، فاجعل لك من كلٍّ نصيباً" />
-        <div className="grid grid-cols-2 gap-3">
-          {QURAN_TYPE_IDS.map((ty) => (
-            <TypeCard key={ty} stats={types[ty]} week={week.byType[ty]} onOpen={() => setTypeOpen(ty)} />
-          ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <SectionTitle title="ختماتك" subtitle="من مصحفي: الورد يتوزّع على أيام الختمة، وما فاتك يُضاف إلى يومك" />
-        {all.length === 0 ? (
-          <Card className="p-4">
-            <p className="text-[13px] text-text-secondary dark:text-text-on-dark/75 text-pretty">
-              لا ختمات بعد. أنشئ ختمة في مصحفي واختر نوعها وأيامها، فيظهر وردها اليومي هنا.
-            </p>
-          </Card>
-        ) : (
-          all.map((s) => <KhatmaRow key={s.id} s={s} />)
-        )}
-      </section>
-
-      <SessionsSection ses={ses} />
-
       <BadgeCategoryStrip categories={['quran']} />
 
       <div className="flex items-center justify-between gap-2 text-[11.5px] text-text-muted">
@@ -304,127 +365,7 @@ function Linked({ code }: { code: string }) {
   );
 }
 
-const SESSION_META: Record<SessionType, { label: string; Icon: LucideIcon }> = {
-  tilawa: { label: 'تلاوة', Icon: BookOpen },
-  listen: { label: 'استماع', Icon: Headphones },
-  hifz: { label: 'حفظ', Icon: Sprout },
-  review: { label: 'مراجعة', Icon: Repeat },
-};
-
-const isHeld = (t: SessionType) => t === 'hifz' || t === 'review';
-
-/** The latest five, newest first. */
-function SessionList({ items }: { items: SessionItem[] }) {
-  return (
-    <Card className="p-1.5">
-      <ul className="divide-y divide-black/[0.04] dark:divide-white/[0.06]">
-        {items.slice(-5).reverse().map((x) => {
-          const { label, Icon } = SESSION_META[x.ty];
-          const when = new Date(x.s).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
-          return (
-            <li key={x.id} className="flex items-center gap-3 px-2.5 py-2.5">
-              <span className="size-8 rounded-lg bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light inline-flex items-center justify-center shrink-0" aria-hidden>
-                <Icon size={16} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-semibold text-text-primary dark:text-text-on-dark truncate">
-                  {label} · {rangeTxt(x.a, x.z)}
-                </span>
-                <span className="block text-[11.5px] text-text-muted">
-                  {when}
-                  {x.minutes >= 1 ? ` · ${ar(Math.round(x.minutes))} د` : ''} · {ar(x.z - x.a + 1)} آية{x.m ? ' · يدوياً' : ''}
-                </span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
-
-/**
- * مصحفي's «جلسة», two apart (owner 2026-11-20): reading and listening from any place here;
- * memorizing and reviewing in their own section, «الحفظ والمراجعة» (HifzPage).
- */
-function SessionsSection({ ses }: { ses: SessionStats }) {
-  const read = ses.items.filter((x) => !isHeld(x.ty));
-  return (
-    <>
-      <section className="flex flex-col gap-3">
-        <SectionTitle title="جلسات التلاوة والاستماع" subtitle="من «جلسة» في مصحفي: من أي موضع، بلا ختمة" />
-        {read.length ? (
-          <SessionList items={read} />
-        ) : (
-          <Card className="p-4">
-            <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
-              في مصحفي اضغط «جلسة» (⏱)، واختر تلاوة أو استماعاً، وابدأ من أي آية. ما تقرؤه يصل هنا ويُحتسب في نقاطك وأوسمتك، والكهف يوم الجمعة
-              يُعلَّم وحده.
-            </p>
-          </Card>
-        )}
-      </section>
-      <HifzEntry />
-    </>
-  );
-}
-
-/** «الحفظ والمراجعة» at a glance — what you hold and today's review — opening its page. */
-function HifzEntry() {
-  const sessions = useMushafiStore((s) => s.sessions);
-  const cycle = useSettingsStore((s) => s.hifzCycle);
-  const m = hifzModel(sessions, Date.now(), cycle);
-  const t = m.today;
-  return (
-    <section className="flex flex-col gap-3">
-      <SectionTitle title="الحفظ والمراجعة" subtitle="محفوظك، ومراجعته يوماً بيوم" />
-      <Link
-        to="/hifz"
-        className="block rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
-        aria-label={`الحفظ والمراجعة: ${m.held ? `محفوظك ${pagesTxt(m.held)}` : 'ابدأ متابعة حفظك'}`}
-      >
-        <Card pressable className="p-4 flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="size-10 rounded-xl bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light inline-flex items-center justify-center shrink-0" aria-hidden>
-              {m.held ? <Brain size={20} /> : <Sprout size={20} />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] text-text-muted">{m.held ? 'محفوظك' : 'ابدأ متابعة حفظك'}</p>
-              <p className="text-[17px] font-bold text-text-primary dark:text-text-on-dark truncate">
-                {m.held ? pagesTxt(m.held) : 'سجّل ما تحفظه وما تراجعه'}
-              </p>
-            </div>
-            {m.held ? (
-              <span className="shrink-0 text-[13px] font-counter tabular-nums text-teal dark:text-teal-light">
-                {ar(Math.floor((m.held / 604) * 100))}٪
-              </span>
-            ) : null}
-            <ChevronLeft size={18} className="shrink-0 text-text-muted" aria-hidden />
-          </div>
-          {m.held ? (
-            <>
-              <span className="h-1.5 rounded-full bg-teal/10 overflow-hidden" aria-hidden>
-                <span className="block h-full rounded-full bg-[image:var(--gradient-teal)]" style={{ width: `${(m.held / 604) * 100}%` }} />
-              </span>
-              <p className="flex items-center gap-1.5 text-[12.5px] text-text-secondary dark:text-text-on-dark/80">
-                {t.left ? <Repeat size={14} className="text-gold-dark dark:text-gold-light" aria-hidden /> : <Check size={14} className="text-teal" aria-hidden />}
-                {t.left ? `مراجعة اليوم: بقي ${pagesTxt(t.left)}` : t.done ? 'أتممت مراجعة اليوم' : 'لا مراجعة عليك اليوم'}
-                {t.late ? <span className="text-danger"> · {pagesTxt(t.late)} متأخرة</span> : null}
-              </p>
-            </>
-          ) : (
-            <p className="text-[12.5px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
-              مراجعة كل يوم بالقريب والبعيد، وما تحفظه بعد، وخريطة محفوظك في المصحف.
-            </p>
-          )}
-        </Card>
-      </Link>
-    </section>
-  );
-}
-
-const khatmasTxt = (n: number) => (n === 1 ? 'ختمة واحدة' : n === 2 ? 'ختمتين' : n <= 10 ? `${ar(n)} ختمات` : `${ar(n)} ختمة`);
-const daysTxt = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n <= 10 ? `${ar(n)} أيام` : `${ar(n)} يوماً`);
+// ── shared bits ──────────────────────────────────────────────────────────────
 
 function TypeIcon({ type, size = 32 }: { type: QuranType; size?: number }) {
   const { Icon } = QURAN_TYPES[type];
@@ -439,212 +380,617 @@ function TypeIcon({ type, size = 32 }: { type: QuranType; size?: number }) {
   );
 }
 
-/** Today's wird: the total, and what each running khatma still owes — never one khatma's name over the sum. */
-function TodayWird({ t, weekPages }: { t: MushafiToday; weekPages: number }) {
+function Bar({ frac, gold = false, className = '' }: { frac: number; gold?: boolean; className?: string }) {
+  return (
+    <span className={`block h-1.5 rounded-full bg-teal/10 overflow-hidden ${className}`} aria-hidden>
+      <span
+        className={`block h-full rounded-full ${gold ? 'bg-[image:var(--gradient-gold)]' : 'bg-[image:var(--gradient-teal)]'}`}
+        style={{ width: `${Math.round(Math.max(0, Math.min(1, frac)) * 100)}%` }}
+      />
+    </span>
+  );
+}
+
+/** A section title's «more» link. */
+function MoreLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="inline-flex items-center gap-0.5 min-h-9 px-1 text-xs font-semibold text-teal dark:text-teal-light">
+      {children} <ChevronLeft size={14} aria-hidden />
+    </Link>
+  );
+}
+
+// ── the hero ─────────────────────────────────────────────────────────────────
+
+/** Today's wird on a ring: what all the running khatmas owe today, together — their names are in «خطة اليوم». */
+function Hero({ t, today, weekPages, streak }: { t: MushafiToday; today: number; weekPages: number; streak: number }) {
   const syncedAt = useMushafiStore((s) => s.syncedAt);
   const status = useMushafiStore((s) => s.status);
   const done = t.owe === 0;
-  const pct = Math.round((t.achieved / t.goal) * 100);
   const lead = t.live.find((s) => s.owe > 0) ?? t.live[0];
+  const frac = t.goal > 0 ? Math.min(1, t.achieved / t.goal) : 0;
   return (
-    <Card variant="gradient-edge" className="p-5">
-      <ArchMotif className="absolute -top-6 -end-6 w-36 text-gold opacity-20" />
-      <div className="relative flex items-center gap-4">
-        <Medallion
-          size={68}
-          tone={done ? 'gold' : 'teal'}
-          className={done ? 'text-gold-dark dark:text-gold-light' : 'text-teal dark:text-teal-light'}
-        >
+    <Card variant="night" className="p-4 pb-5 overflow-hidden">
+      <ArchMotif className="absolute -top-4 -start-6 w-32 h-40 text-gold opacity-[0.13]" />
+      <ArchMotif className="absolute -top-4 -end-6 w-32 h-40 text-gold opacity-[0.13] -scale-x-100" />
+      <p className="relative font-quran text-[17px] leading-loose text-gold-light text-center">﴿وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا﴾</p>
+
+      <div className="relative mt-2" role="progressbar" aria-label="وِرد اليوم" aria-valuemin={0} aria-valuemax={t.goal} aria-valuenow={t.achieved}>
+        <Ring frac={frac}>
           {done ? (
-            <Check size={26} strokeWidth={2.5} />
+            <>
+              <Check size={34} strokeWidth={2.5} className="text-gold-light" aria-hidden />
+              <span className="mt-1 text-[13px] font-bold text-text-on-dark">أتممت وردك</span>
+            </>
           ) : (
-            <span className="text-[15px] font-counter tabular-nums">
-              {ar(t.achieved)}
-              <span className="text-[11px] opacity-70">/{ar(t.goal)}</span>
-            </span>
+            <>
+              <span className="text-[11.5px] text-gold-light/90">{t.live.length > 1 ? `وِرد ${khatmasTxt(t.live.length)}` : t.live.length ? 'وِرد اليوم' : 'صفحات يومك'}</span>
+              <span className="font-counter text-[40px] font-bold leading-[1.1] text-text-on-dark tabular-nums">
+                {ar(t.achieved)}
+                <span className="text-[18px] text-text-on-dark/55">/{ar(t.goal)}</span>
+              </span>
+              <span className="text-[11.5px] text-text-on-dark/70">صفحة</span>
+            </>
           )}
-        </Medallion>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11.5px] text-text-muted">
-            {t.live.length > 1 ? `وِرد اليوم من ${khatmasTxt(t.live.length)}` : t.live.length === 1 ? 'وِرد اليوم' : 'صفحات يومك'}
-          </p>
-          <h2 className="text-lg font-display font-bold text-text-primary dark:text-text-on-dark text-balance">
-            {done ? 'أتممت وِرد اليوم' : `بقي ${pagesTxt(t.owe)}`}
-          </h2>
-          <p className="text-[12px] text-text-secondary dark:text-text-on-dark/70 text-pretty">
-            {t.late > 0 && !done
-              ? `منها ${pagesTxt(t.late)} فاتتك`
-              : `قرأت اليوم ${pagesTxt(t.pages)}، وفي سبعة أيام ${pagesTxt(weekPages)}`}
-          </p>
-        </div>
+        </Ring>
       </div>
 
-      {t.live.length > 0 ? (
-        <ul className="relative mt-4 flex flex-col gap-1.5">
-          {t.live.map((s) => {
-            const part = Math.max(0, Math.min(1, (s.share - Math.min(s.owe, s.share)) / s.share));
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => void openMushafi(s.next)}
-                  className="w-full flex items-center gap-3 rounded-[var(--radius-inner)] bg-white/75 dark:bg-dark-bg/45 px-3 py-2.5 text-start"
-                >
-                  <TypeIcon type={s.type} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13.5px] font-bold text-text-primary dark:text-text-on-dark truncate">{s.name}</span>
-                    <span className="block text-[11px] text-text-muted">
-                      {QURAN_TYPES[s.type].label}
-                      {s.owe > 0 ? `، من ص ${ar(s.next)} إلى ${ar(s.end)}` : ''}
-                    </span>
-                    <span className="mt-1 block h-1 rounded-full bg-teal/10 overflow-hidden" aria-hidden>
-                      <span
-                        className={`block h-full rounded-full ${s.owe === 0 ? 'bg-[image:var(--gradient-gold)]' : 'bg-[image:var(--gradient-teal)]'}`}
-                        style={{ width: `${Math.round(part * 100)}%` }}
-                      />
-                    </span>
-                  </span>
-                  <span
-                    className={[
-                      'shrink-0 text-[12px] font-bold font-counter tabular-nums',
-                      s.owe === 0 ? 'text-gold-dark dark:text-gold-light inline-flex items-center gap-1' : 'text-teal dark:text-teal-light',
-                    ].join(' ')}
-                  >
-                    {s.owe === 0 ? (
-                      <>
-                        <Check size={13} strokeWidth={3} aria-hidden /> تمّ
-                      </>
-                    ) : (
-                      `بقي ${ar(s.owe)} ص`
-                    )}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      <div
-        className="relative mt-4 h-2 rounded-full bg-teal/10 overflow-hidden"
-        role="progressbar"
-        aria-label="وِرد اليوم"
-        aria-valuemin={0}
-        aria-valuemax={t.goal}
-        aria-valuenow={t.achieved}
+      <p
+        className={[
+          'relative mt-3 mx-auto w-fit max-w-full flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold text-pretty',
+          // text-text-primary = the light ink in every mode: dark on the gold fill
+          done ? 'bg-[image:var(--gradient-gold)] text-text-primary shadow-[var(--shadow-glow-gold)]' : 'bg-white/[0.07] ring-1 ring-white/10 text-text-on-dark',
+        ].join(' ')}
       >
-        <span
-          className={`absolute inset-y-0 start-0 rounded-full ${done ? 'bg-[image:var(--gradient-gold)]' : 'bg-[image:var(--gradient-teal)]'}`}
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
+        {done ? (
+          <>
+            <Check size={15} className="shrink-0" aria-hidden /> أتممت وِرد اليوم، تقبّل الله منك
+          </>
+        ) : (
+          <>
+            <BookOpen size={15} className="shrink-0 text-gold-light" aria-hidden />
+            بقي {pagesTxt(t.owe)}
+            {t.late > 0 ? <span className="text-gold-light"> · منها {ar(t.late)} فاتتك</span> : null}
+          </>
+        )}
+      </p>
+
+      <div className="relative mt-4 grid grid-cols-3 gap-2">
+        <HeroStat Icon={Flame} value={ar(streak)} label={streak === 1 ? 'يوم مع القرآن' : 'أيام متتالية'} />
+        <HeroStat Icon={BookOpen} value={num(today)} label="صفحة اليوم" />
+        <HeroStat Icon={CalendarDays} value={num(weekPages)} label="في سبعة أيام" />
       </div>
-      <Button className="relative mt-4" fullWidth leftIcon={<BookOpen size={18} />} onClick={() => void openMushafi(done ? undefined : lead?.next)}>
-        {lead && !done ? `اقرأ وردك من ص ${ar(lead.next)}` : 'افتح مصحفي'}
+
+      <Button variant="gold" className="relative mt-4" fullWidth leftIcon={<BookOpen size={18} />} onClick={() => void openMushafi(done ? undefined : lead?.next)}>
+        {lead && !done ? `تابع وردك من ص ${ar(lead.next)}` : 'افتح مصحفي'}
       </Button>
-      <div className="relative mt-3 flex items-center justify-between gap-2 text-[11.5px] text-text-muted">
+      <div className="relative mt-2.5 flex items-center justify-between gap-2 text-[11.5px] text-text-on-dark/60">
         <span>{status === 'fail' ? 'تعذّرت المزامنة، تحقّق من الاتصال' : `آخر مزامنة ${agoTxt(syncedAt)}`}</span>
         <button
           type="button"
           onClick={() => void pullMushafi()}
           disabled={status === 'syncing'}
-          className="min-h-9 px-2 inline-flex items-center gap-1 rounded-lg text-teal dark:text-teal-light hover:bg-teal/10 disabled:opacity-60"
+          className="min-h-9 px-2 inline-flex items-center gap-1 rounded-lg text-gold-light hover:bg-white/[0.08] disabled:opacity-60"
         >
-          <RefreshCw size={13} className={status === 'syncing' ? 'animate-spin' : ''} aria-hidden /> حدّث الآن
+          <RefreshCw size={13} className={status === 'syncing' ? 'animate-spin motion-reduce:animate-none' : ''} aria-hidden /> حدّث الآن
         </button>
       </div>
     </Card>
   );
 }
 
-/** «سلسلتك»: any reading, then each type you keep (or have open). */
-function StreakStrip({ any, byType, types }: { any: number; byType: Record<QuranType, number>; types: Record<QuranType, TypeStats> }) {
-  const shown = QURAN_TYPE_IDS.filter((ty) => byType[ty] > 0 || types[ty].running.length > 0);
-  if (!any && !shown.length) return null;
+function Ring({ frac, children }: { frac: number; children: ReactNode }) {
+  const r = 64;
+  const c = 2 * Math.PI * r;
   return (
-    <div className="flex flex-wrap gap-2" aria-label="سلاسلك مع القرآن">
-      <span className="inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full bg-gold/15 text-gold-dark dark:text-gold-light text-[12.5px] font-bold">
-        <Flame size={14} aria-hidden /> مع القرآن {any ? daysTxt(any) : 'ابدأ اليوم'}
-      </span>
-      {shown.map((ty) => (
-        <span
-          key={ty}
-          className={[
-            'inline-flex items-center gap-1.5 min-h-9 px-3 rounded-full text-[12px] font-semibold ring-1',
-            byType[ty] > 0
-              ? 'bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light ring-teal/20'
-              : 'text-text-muted ring-black/[0.08] dark:ring-white/[0.1]',
-          ].join(' ')}
-        >
-          {(() => {
-            const { Icon } = QURAN_TYPES[ty];
-            return <Icon size={13} aria-hidden />;
-          })()}
-          {QURAN_TYPES[ty].label}{byType[ty] > 0 ? ` ${daysTxt(byType[ty])}` : '، عُد إليه اليوم'}
-        </span>
-      ))}
+    <div className="relative mx-auto size-[156px]">
+      <svg viewBox="0 0 156 156" className="size-full -rotate-90" aria-hidden>
+        <circle cx="78" cy="78" r={r} fill="none" stroke="currentColor" strokeWidth="10" className="text-white/[0.09]" />
+        <circle
+          cx="78"
+          cy="78"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - frac)}
+          className="text-gold-light transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
   );
 }
 
-/** One kind of khatma: where you stand in it — or an invitation to have a share. */
-function TypeCard({ stats, week, onOpen }: { stats: TypeStats; week: number; onOpen: () => void }) {
-  const meta = QURAN_TYPES[stats.type];
-  const run = stats.running[0];
-  const none = !run && stats.finished === 0 && week === 0;
-  const pct = run ? Math.floor((run.done / run.total) * 100) : 0;
+function HeroStat({ Icon, value, label }: { Icon: LucideIcon; value: string; label: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.08] px-2 py-2.5 text-center">
+      <Icon size={14} className="mx-auto text-gold-light" aria-hidden />
+      <p className="mt-1 text-[17px] font-counter font-bold tabular-nums leading-tight text-text-on-dark">{value}</p>
+      <p className="text-[10.5px] text-text-on-dark/70 leading-tight truncate">{label}</p>
+    </div>
+  );
+}
+
+// ── «خطة اليوم» ──────────────────────────────────────────────────────────────
+
+interface PlanItem {
+  id: string;
+  Icon: LucideIcon;
+  title: string;
+  sub: string;
+  done: boolean;
+  /** Short, on the line's end: «بقي ٥ ص» · «تمّ». */
+  status: string;
+  frac: number;
+  onOpen: () => void;
+}
+
+function TodayPlan({ items }: { items: PlanItem[] }) {
+  const done = items.filter((i) => i.done).length;
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle
+        title="خطة اليوم"
+        subtitle="وِرد ختماتك ومراجعتك وحفظك، كلٌّ في سطر"
+        action={
+          items.length ? (
+            <span className="text-[12px] font-bold font-counter tabular-nums text-text-muted">
+              {ar(done)} من {ar(items.length)}
+            </span>
+          ) : undefined
+        }
+      />
+      {items.length ? (
+        <Card className="p-1.5">
+          <ul className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.06]">
+            {items.map((it) => (
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={it.onOpen}
+                  className="w-full flex items-center gap-3 rounded-[var(--radius-inner)] px-2.5 py-3 text-start hover:bg-teal/5 transition-colors"
+                >
+                  <span
+                    className={[
+                      'size-10 shrink-0 rounded-xl inline-flex items-center justify-center',
+                      it.done ? 'bg-gold/15 text-gold-dark dark:text-gold-light' : 'bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light',
+                    ].join(' ')}
+                    aria-hidden
+                  >
+                    {it.done ? <Check size={18} strokeWidth={3} /> : <it.Icon size={18} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span
+                        className={[
+                          'text-[14px] font-bold truncate',
+                          it.done ? 'text-text-secondary dark:text-text-on-dark/70' : 'text-text-primary dark:text-text-on-dark',
+                        ].join(' ')}
+                      >
+                        {it.title}
+                      </span>
+                      <span
+                        className={[
+                          'shrink-0 text-[12px] font-bold font-counter tabular-nums',
+                          it.done ? 'text-gold-dark dark:text-gold-light' : 'text-teal dark:text-teal-light',
+                        ].join(' ')}
+                      >
+                        {it.status}
+                      </span>
+                    </span>
+                    <span className="block text-[11.5px] text-text-muted truncate">{it.sub}</span>
+                    {it.done ? null : <Bar frac={it.frac} className="mt-1.5" />}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        <Card className="p-4 flex flex-col gap-3">
+          <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/80 text-pretty">
+            لا وِرد عليك اليوم بعد. أنشئ ختمة في مصحفي («الختمات» ثم «ختمة جديدة») واختر نوعها وأيامها، فيظهر وردها هنا كل يوم.
+          </p>
+          <Button variant="soft" onClick={() => void openMushafi()} leftIcon={<BookOpen size={16} />}>
+            افتح مصحفي
+          </Button>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+// ── «ختماتك» ─────────────────────────────────────────────────────────────────
+
+function Khatmas({ running, finished }: { running: KhatmaState[]; finished: KhatmaState[] }) {
+  const [showDone, setShowDone] = useState(false);
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle
+        title="ختماتك"
+        subtitle={running.length ? 'العلامة الذهبية حيث يبلغ وِرد اليوم' : 'من مصحفي: كل ختمة يتوزّع وردها على أيامها'}
+        action={
+          running.length ? <span className="text-[12px] font-bold text-text-muted">{runningTxt(running.length)}</span> : undefined
+        }
+      />
+      {running.length ? (
+        running.map((s) => <KhatmaCard key={s.id} s={s} />)
+      ) : (
+        <Card className="p-4">
+          <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
+            لا ختمة جارية. أنشئ ختمة في مصحفي واختر نوعها وأيامها، فيظهر وردها اليومي هنا.
+          </p>
+        </Card>
+      )}
+      {finished.length ? (
+        <Card className="p-1.5">
+          <button
+            type="button"
+            aria-expanded={showDone}
+            onClick={() => setShowDone((v) => !v)}
+            className="w-full min-h-11 flex items-center justify-between gap-2 rounded-[var(--radius-inner)] px-2.5 text-[13px] font-bold text-text-primary dark:text-text-on-dark hover:bg-teal/5"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Check size={15} className="text-gold-dark dark:text-gold-light" aria-hidden />
+              ختمات أتممتها
+              <span className="font-counter tabular-nums text-text-muted">({ar(finished.length)})</span>
+            </span>
+            <ChevronLeft size={16} className={['text-text-muted transition-transform duration-200', showDone ? '-rotate-90' : ''].join(' ')} aria-hidden />
+          </button>
+          {showDone ? (
+            <ul className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.06]">
+              {finished.map((s) => (
+                <li key={s.id} className="flex items-center gap-3 px-2.5 py-2.5">
+                  <TypeIcon type={s.type} size={30} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-semibold text-text-primary dark:text-text-on-dark truncate">{s.name}</span>
+                    <span className="block text-[11.5px] text-text-muted">
+                      {QURAN_TYPES[s.type].label}
+                      {s.finished
+                        ? ` · ختمتها ${new Date(`${s.finished}T12:00`).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                        : ''}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Card>
+      ) : null}
+    </section>
+  );
+}
+
+/** A running khatma: its share of the Mushaf, where today's wird reaches (the gold mark), and what today still owes. */
+function KhatmaCard({ s }: { s: KhatmaState }) {
+  const pct = Math.floor((s.done / s.total) * 100);
+  const over = s.day >= s.days;
+  // done counts from the khatma's own start page (top − done = the pages before it).
+  const target = Math.max(0, Math.min(1, (s.end - (s.top - s.done)) / s.total));
+  const left = s.days - s.day - 1;
+  const status = over
+    ? `انتهت مدتها، وبقي ${pagesTxt(s.total - s.done)}`
+    : s.owe > 0
+      ? `وِرد اليوم: بقي ${pagesTxt(s.owe)}${s.late ? `، منها ${ar(s.late)} فاتتك` : ''}`
+      : 'أتممت وِرد اليوم';
   return (
     <button
       type="button"
-      onClick={onOpen}
-      className={[
-        'text-start rounded-[var(--radius-card)] p-3.5 flex flex-col gap-2 min-h-[148px]',
-        none
-          ? 'border border-dashed border-teal/30 bg-transparent'
-          : 'bg-white dark:bg-dark-card ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[var(--shadow-xs)]',
-      ].join(' ')}
+      onClick={() => void openMushafi(s.next)}
+      className="text-start rounded-[var(--radius-card)] bg-white dark:bg-dark-card ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[var(--shadow-xs)] p-4 flex flex-col gap-3 hover:ring-teal/25 transition-shadow"
     >
-      <span className="flex items-center gap-2">
-        <TypeIcon type={stats.type} size={34} />
-        <span className="min-w-0">
-          <span className="block text-[14.5px] font-bold text-text-primary dark:text-text-on-dark">{meta.label}</span>
-          <span className="block text-[11px] text-text-muted truncate">{meta.sub}</span>
+      <span className="flex items-center gap-3">
+        <TypeIcon type={s.type} size={40} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-bold text-text-primary dark:text-text-on-dark truncate">{s.name}</span>
+          <span className="block text-[11.5px] text-text-muted">
+            {QURAN_TYPES[s.type].label} · {over ? `مدتها ${daysTxt(s.days)}` : `اليوم ${ar(s.day + 1)} من ${ar(s.days)}${left > 0 ? `، بقي ${daysTxt(left)}` : '، آخر أيامها'}`}
+          </span>
+        </span>
+        <span className="shrink-0 font-counter tabular-nums text-[20px] font-bold text-teal dark:text-teal-light">
+          {ar(pct)}
+          <span className="text-[12px]">٪</span>
         </span>
       </span>
-      {run ? (
-        <>
-          <span className="text-[12px] text-text-secondary dark:text-text-on-dark/80 truncate">
-            {stats.running.length > 1 ? `${khatmasTxt(stats.running.length)} جارية` : `«${run.name}»`}
-          </span>
-          <span className="h-1.5 rounded-full bg-teal/10 overflow-hidden" aria-hidden>
-            <span className="block h-full rounded-full bg-[image:var(--gradient-teal)]" style={{ width: `${pct}%` }} />
-          </span>
-          <span className="flex items-baseline justify-between gap-1 text-[11px] text-text-muted">
-            <span className="font-counter tabular-nums">{ar(pct)}٪</span>
-            <span>{week > 0 ? `هذا الأسبوع ${ar(week)} ص` : 'لم تتقدّم هذا الأسبوع'}</span>
-          </span>
-        </>
-      ) : stats.finished > 0 ? (
-        <>
-          <span className="text-[12px] font-semibold text-gold-dark dark:text-gold-light">
-            ختمت {khatmasTxt(stats.finished)}
-          </span>
-          <span className="text-[11px] text-text-muted text-pretty">ابدأ ختمة جديدة ليبقى لك منها نصيب</span>
-        </>
-      ) : week > 0 ? (
-        // No khatma of it, but sessions in مصحفي this week (owner: review has no khatma)
-        <>
-          <span className="text-[12px] font-semibold text-teal dark:text-teal-light">هذا الأسبوع {ar(week)} ص</span>
-          <span className="mt-auto text-[11px] text-text-muted text-pretty">من جلساتك في مصحفي</span>
-        </>
-      ) : (
-        <>
-          <span className="text-[11.5px] text-text-secondary dark:text-text-on-dark/80 text-pretty">{meta.benefit}</span>
-          <span className="mt-auto text-[11.5px] font-bold text-teal dark:text-teal-light">اجعل لك منه نصيباً ›</span>
-        </>
-      )}
+      <span className="relative block h-2 rounded-full bg-teal/10" aria-hidden>
+        <span className="absolute inset-y-0 start-0 rounded-full bg-[image:var(--gradient-teal)]" style={{ width: `${pct}%` }} />
+        {!over && s.owe > 0 ? (
+          <span className="absolute -top-1 -bottom-1 w-[3px] rounded-full bg-gold" style={{ insetInlineStart: `calc(${target * 100}% - 1.5px)` }} />
+        ) : null}
+      </span>
+      <span className="flex items-baseline justify-between gap-2 text-[12px]">
+        <span
+          className={
+            over
+              ? 'text-danger'
+              : s.owe > 0
+                ? 'font-semibold text-text-secondary dark:text-text-on-dark/85'
+                : 'font-semibold text-gold-dark dark:text-gold-light'
+          }
+        >
+          {status}
+        </span>
+        <span className="shrink-0 font-counter tabular-nums text-text-muted">
+          {ar(s.done)} / {ar(s.total)} ص
+        </span>
+      </span>
     </button>
   );
 }
+
+// ── «الحفظ والمراجعة» ────────────────────────────────────────────────────────
+
+const JUZ_TICKS = [1, 10, 20, 30];
+
+/** What you hold by heart, juz by juz, and this week's new and review — opening «الحفظ والمراجعة». */
+function HifzPanel({ m, now }: { m: HifzModel; now: number }) {
+  if (!m.held && !m.log.length) {
+    return (
+      <section className="flex flex-col gap-3">
+        <SectionTitle title="الحفظ والمراجعة" subtitle="محفوظك، ومراجعته يوماً بيوم" />
+        <Link to="/hifz" className="block rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal">
+          <Card variant="gradient-edge" pressable className="p-4 flex items-center gap-3.5">
+            <Medallion size={56} tone="gold">
+              <Sprout size={22} aria-hidden />
+            </Medallion>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-bold text-text-primary dark:text-text-on-dark">ابدأ متابعة حفظك</span>
+              <span className="block text-[12.5px] leading-relaxed text-text-secondary dark:text-text-on-dark/80 text-pretty">
+                سجّل ما تحفظه وما تراجعه، فترى خريطة محفوظك ومراجعة كل يوم بالقريب والبعيد.
+              </span>
+            </span>
+            <ChevronLeft size={18} className="shrink-0 text-text-muted" aria-hidden />
+          </Card>
+        </Link>
+      </section>
+    );
+  }
+  const pct = (m.held / 604) * 100;
+  const juzFull = m.juz.filter((j) => j.held === j.total).length;
+  const weekFrom = dk(startOfWeek(now, { weekStartsOn: 6 }));
+  let fresh = 0;
+  let review = 0;
+  for (const [d, v] of m.days)
+    if (d >= weekFrom) {
+      fresh += v.fresh;
+      review += v.review;
+    }
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle title="الحفظ والمراجعة" subtitle="محفوظك في المصحف جزءاً جزءاً" action={<MoreLink to="/hifz">التفاصيل والسجلّ</MoreLink>} />
+      <Link
+        to="/hifz"
+        className="block rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
+        aria-label={`الحفظ والمراجعة: محفوظك ${pagesTxt(m.held)}، ${ar(juzFull)} جزء كامل`}
+      >
+        <Card pressable className="p-4 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] text-text-muted">محفوظك</p>
+              <p className="text-[22px] font-display font-bold leading-tight text-text-primary dark:text-text-on-dark">{pagesTxt(m.held)}</p>
+              <p className="mt-0.5 text-[12px] text-text-secondary dark:text-text-on-dark/75">
+                {m.held && pct < 10 ? num(pct) : ar(Math.floor(pct))}٪ من المصحف، {ar(juzFull)} {juzFull >= 3 && juzFull <= 10 ? 'أجزاء كاملة' : 'جزء كامل'}
+              </p>
+            </div>
+            <div className="shrink-0 grid grid-cols-2 gap-1.5 text-center">
+              <MiniStat Icon={Sprout} value={num(fresh)} label="حفظ" gold />
+              <MiniStat Icon={Repeat} value={num(review)} label="مراجعة" />
+              <p className="col-span-2 text-[10.5px] text-text-muted">صفحات هذا الأسبوع</p>
+            </div>
+          </div>
+          <div>
+            <div className="grid gap-[3px] h-12" style={{ gridTemplateColumns: 'repeat(30, minmax(0, 1fr))' }} aria-hidden>
+              {m.juz.map((j, i) => (
+                <span key={i} className="relative rounded-[3px] bg-track overflow-hidden">
+                  <span
+                    className={`absolute inset-x-0 bottom-0 ${j.held === j.total ? 'bg-gold' : 'bg-teal dark:bg-teal-light'}`}
+                    style={{ height: `${(j.held / j.total) * 100}%` }}
+                  />
+                </span>
+              ))}
+            </div>
+            <div className="mt-1 grid gap-[3px] text-[10px] font-counter tabular-nums text-text-muted" style={{ gridTemplateColumns: 'repeat(30, minmax(0, 1fr))' }} aria-hidden>
+              {JUZ_TICKS.map((j) => (
+                <span key={j} className="text-center" style={{ gridColumn: j }}>
+                  {ar(j)}
+                </span>
+              ))}
+            </div>
+            <p className="mt-1.5 flex items-center gap-3 text-[11px] text-text-muted">
+              <span className="inline-flex items-center gap-1">
+                <span className="size-2.5 rounded-sm bg-teal dark:bg-teal-light" aria-hidden /> بعضه محفوظ
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="size-2.5 rounded-sm bg-gold" aria-hidden /> جزء كامل
+              </span>
+            </p>
+          </div>
+        </Card>
+      </Link>
+    </section>
+  );
+}
+
+function MiniStat({ Icon, value, label, gold = false }: { Icon: LucideIcon; value: string; label: string; gold?: boolean }) {
+  return (
+    <span
+      className={[
+        'min-w-[3.75rem] rounded-xl px-2 py-1.5 flex flex-col items-center',
+        gold ? 'bg-gold/10 text-gold-dark dark:text-gold-light' : 'bg-teal/[0.07] dark:bg-teal/15 text-teal dark:text-teal-light',
+      ].join(' ')}
+    >
+      <span className="inline-flex items-center gap-1 text-[15px] font-counter font-bold tabular-nums leading-tight">
+        <Icon size={12} aria-hidden />
+        {value}
+      </span>
+      <span className="text-[10.5px] text-text-muted">{label}</span>
+    </span>
+  );
+}
+
+// ── «أسبوعك مع القرآن» ───────────────────────────────────────────────────────
+
+function WeekSection({
+  keys,
+  perDay,
+  byType,
+  streaks,
+  types,
+  onType,
+}: {
+  keys: string[];
+  perDay: number[];
+  byType: Record<QuranType, number>;
+  streaks: Record<QuranType, number>;
+  types: Record<QuranType, TypeStats>;
+  onType: (t: QuranType) => void;
+}) {
+  const data = keys.map((k, i) => ({
+    label: WEEKDAY_SHORT_AR[new Date(`${k}T12:00`).getDay()],
+    value: Math.round(perDay[i] * 10) / 10,
+    highlight: i === keys.length - 1,
+  }));
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle title="أسبوعك مع القرآن" subtitle="الصفحات المحتسبة من ختماتك وجلساتك، ونصيبك من كل نوع" />
+      <Card className="p-4 flex flex-col gap-3">
+        {perDay.some((n) => n > 0) ? (
+          <BarChart data={data} height={112} showValues formatValue={(v) => (v ? num(v) : '')} />
+        ) : (
+          <p className="py-2 text-[12.5px] text-text-muted text-center text-pretty">لم تُحتسب صفحات في الأيام السبعة الماضية بعد.</p>
+        )}
+        <ul className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.06] border-t border-black/[0.04] dark:border-white/[0.06]">
+          {QURAN_TYPE_IDS.map((ty) => {
+            const st = types[ty];
+            const run = st.running[0];
+            const sub = run
+              ? st.running.length > 1
+                ? runningTxt(st.running.length)
+                : `«${run.name}»، ${ar(Math.floor((run.done / run.total) * 100))}٪`
+              : st.finished
+                ? `أتممت ${khatmasTxt(st.finished)}`
+                : byType[ty] > 0
+                  ? 'من جلساتك'
+                  : QURAN_TYPES[ty].benefit;
+            return (
+              <li key={ty}>
+                <button type="button" onClick={() => onType(ty)} className="w-full min-h-12 flex items-center gap-3 py-2.5 text-start">
+                  <TypeIcon type={ty} size={34} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-bold text-text-primary dark:text-text-on-dark">
+                      {ty === 'hifz' ? 'الحفظ والمراجعة' : QURAN_TYPES[ty].label}
+                    </span>
+                    <span className="block text-[11px] text-text-muted truncate">{sub}</span>
+                  </span>
+                  {streaks[ty] > 0 ? (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[11.5px] font-bold font-counter text-gold-dark dark:text-gold-light" aria-label={`سلسلته ${daysTxt(streaks[ty])}`}>
+                      <Flame size={12} aria-hidden />
+                      {ar(streaks[ty])}
+                    </span>
+                  ) : null}
+                  <span className="shrink-0 w-14 text-end text-[13px] font-bold font-counter tabular-nums text-text-primary dark:text-text-on-dark">
+                    {byType[ty] > 0 ? `${num(byType[ty])} ص` : <span className="text-text-muted font-normal">—</span>}
+                  </span>
+                  <ChevronLeft size={16} className="shrink-0 text-text-muted" aria-hidden />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
+// ── «آخر جلساتك» ─────────────────────────────────────────────────────────────
+
+const SESSION_META: Record<SessionType, { label: string; Icon: LucideIcon }> = {
+  tilawa: { label: 'تلاوة', Icon: BookOpen },
+  listen: { label: 'استماع', Icon: Headphones },
+  hifz: { label: 'حفظ', Icon: Sprout },
+  review: { label: 'مراجعة', Icon: Repeat },
+};
+
+/** The latest sessions of every kind, by day. */
+function RecentSessions({ items, now }: { items: SessionItem[]; now: number }) {
+  const list = items.slice(-6).reverse();
+  const today = dk(now);
+  const yesterday = dk(subDays(now, 1));
+  const groups: [string, SessionItem[]][] = [];
+  for (const x of list) {
+    const g = groups[groups.length - 1];
+    if (g && g[0] === x.day) g[1].push(x);
+    else groups.push([x.day, [x]]);
+  }
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle
+        title="آخر جلساتك"
+        subtitle="من «جلسة» في مصحفي: تلاوة واستماع وحفظ ومراجعة"
+        action={list.length ? <MoreLink to="/hifz">سجلّ الحفظ</MoreLink> : undefined}
+      />
+      {list.length ? (
+        <Card className="p-1.5">
+          {groups.map(([day, xs]) => (
+            <div key={day}>
+              <p className="px-2.5 pt-2.5 pb-1 text-[11.5px] font-bold text-text-muted">
+                {day === today
+                  ? 'اليوم'
+                  : day === yesterday
+                    ? 'أمس'
+                    : new Date(xs[0].s).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+              <ul className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.06]">
+                {xs.map((x) => {
+                  const { label, Icon } = SESSION_META[x.ty];
+                  let pages = 0;
+                  for (const f of x.pages.values()) pages += f;
+                  const held = x.ty === 'hifz' || x.ty === 'review';
+                  return (
+                    <li key={x.id} className="flex items-center gap-3 px-2.5 py-2.5">
+                      <span
+                        className={[
+                          'size-9 rounded-xl inline-flex items-center justify-center shrink-0',
+                          held ? 'bg-gold/15 text-gold-dark dark:text-gold-light' : 'bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light',
+                        ].join(' ')}
+                        aria-hidden
+                      >
+                        <Icon size={16} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13.5px] font-semibold text-text-primary dark:text-text-on-dark truncate">
+                          {label} · {rangeTxt(x.a, x.z)}
+                        </span>
+                        <span className="block text-[11.5px] text-text-muted">
+                          {new Date(x.s).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })}
+                          {x.minutes >= 1 ? `، ${minutesTxt(x.minutes)}` : ''}
+                          {x.m ? '، يدوياً' : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[12.5px] font-bold font-counter tabular-nums text-text-secondary dark:text-text-on-dark/80">{num(pages)} ص</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </Card>
+      ) : (
+        <Card className="p-4">
+          <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
+            في مصحفي اضغط «جلسة» (⏱)، واختر تلاوة أو استماعاً أو حفظاً أو مراجعة، وابدأ من أي آية. ما تقرؤه يصل هنا ويُحتسب في نقاطك وأوسمتك بعدد صفحاته،
+            والكهف يوم الجمعة يُعلَّم وحده.
+          </p>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+// ── a type up close ──────────────────────────────────────────────────────────
 
 const TYPE_METRICS: Record<QuranType, BadgeMetric[]> = {
   tilawa: ['quran_pages', 'quran_khatmat', 'quran_streak'],
@@ -689,14 +1035,14 @@ function TypeSheet({
           </p>
           <div className="grid grid-cols-2 gap-2">
             <StatTile value={ar(stats.pages)} label="صفحة في ختماته" />
-            <StatTile value={ar(week)} label="صفحة هذا الأسبوع" />
+            <StatTile value={num(week)} label="صفحة في سبعة أيام" />
             <StatTile value={ar(stats.finished)} label="ختمات أتممتها" accent="gold" />
             <StatTile value={streak ? daysTxt(streak) : '—'} label="سلسلته الآن" accent="gold" />
           </div>
           {stats.running.length ? (
             <div className="flex flex-col gap-2">
               {stats.running.map((s) => (
-                <KhatmaRow key={s.id} s={s} />
+                <KhatmaCard key={s.id} s={s} />
               ))}
             </div>
           ) : (
@@ -719,42 +1065,5 @@ function TypeSheet({
         </div>
       ) : null}
     </BottomSheet>
-  );
-}
-
-function KhatmaRow({ s }: { s: KhatmaState }) {
-  const pct = Math.floor((s.done / s.total) * 100);
-  const over = s.live && s.day >= s.days;
-  const line = !s.live
-    ? 'ختمتها، تقبّل الله منك'
-    : over
-      ? `انتهت المدة، وبقي ${pagesTxt(s.total - s.done)}`
-      : s.owe > 0
-        ? `ورد اليوم: بقي ${pagesTxt(s.owe)}${s.late ? `، منها ${ar(s.late)} فاتتك` : ''}`
-        : 'أتممت ورد اليوم';
-  return (
-    <button
-      type="button"
-      onClick={() => void openMushafi(s.live ? s.next : undefined)}
-      className="text-start rounded-[var(--radius-card)] bg-white dark:bg-dark-card ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[var(--shadow-xs)] p-3.5 flex flex-col gap-2"
-    >
-      <span className="flex items-center gap-2.5">
-        <TypeIcon type={s.type} size={28} />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14.5px] font-bold text-text-primary dark:text-text-on-dark truncate">{s.name}</span>
-          <span className="block text-[11px] text-text-muted">{QURAN_TYPES[s.type].label}</span>
-        </span>
-        <span className="shrink-0 text-[12px] font-counter tabular-nums text-teal dark:text-teal-light">{ar(pct)}٪</span>
-      </span>
-      <span className="h-1.5 rounded-full bg-teal/10 overflow-hidden" aria-hidden>
-        <span className="block h-full rounded-full bg-[image:var(--gradient-teal)]" style={{ width: `${pct}%` }} />
-      </span>
-      <span className="flex items-baseline justify-between gap-2 text-[11.5px]">
-        <span className={s.live && s.owe > 0 && !over ? 'text-text-secondary dark:text-text-on-dark/80' : 'text-text-muted'}>{line}</span>
-        <span className="shrink-0 font-counter tabular-nums text-text-muted">
-          {ar(s.done)} من {ar(s.total)} ص
-        </span>
-      </span>
-    </button>
   );
 }

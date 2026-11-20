@@ -372,4 +372,16 @@ console.log('leaderboardScore: all checks passed');
   assert.equal(part(s, 'morning'), Math.round(LB.morning / 4), 'half the brief set = a quarter');
   s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 226 }] as never;
   assert.equal(part(s, 'morning'), Math.round(LB.morning * 0.75), 'halfway from brief to full = 7.5 → 8');
+  // «لا إله إلا الله وحده لا شريك له» ×100 adds LB.tahlil on top (owner 2026-11-20: 12 in all), pro rata.
+  s.events = [
+    { ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 274 },
+    { ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', subId: 'morning-29', title: '', amount: 100 },
+  ] as never;
+  assert.equal(part(s, 'morning'), LB.morning + LB.tahlil, 'the full set with the tahlil = 12');
+  s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'evening', subId: 'evening-28', title: '', amount: 50 }] as never;
+  // 50 reps < the brief set's 78 → 5 × 50/78, plus half the tahlil's 2
+  assert.equal(part(s, 'evening'), Math.round((LB.evening / 2) * (50 / 78) + LB.tahlil / 2), 'half the tahlil = half its 2');
+  s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', subId: 'morning-30', title: '', amount: 100 }] as never;
+  // 100 reps: past the brief set → 5 + 5 × 22/296, and no bonus
+  assert.equal(part(s, 'morning'), Math.round(LB.morning / 2 + (LB.morning / 2) * (22 / 296)), 'another ×100 dhikr earns no bonus');
 }

@@ -13,9 +13,11 @@
 
 @theme {
   /* ══ Colour tokens ═══════════════════════════════════════════════════
-     Redesign 2026-09 — three palettes, each with light + dark values:
-       زمرد محدث (default) · ليل ونحاس (data-palette="brass") ·
-       رمل ومريمية (data-palette="sage").
+     Redesign 2026-09 — eight palettes, each with light + dark values:
+       زمرد محدث (default) · فيروز وخزف (data-palette="turquoise") ·
+       لازورد وذهب ("lapis") · بنفسج الغروب ("dusk") · ورد وطين ("clay") ·
+       ليل ونحاس ("brass") · رمل ومريمية ("sage") · حبر وورق ("ink").
+     Add one: both blocks below + PREVIEW/PALETTE_OPTIONS in PalettePicker.
      The token NAMES are the historic ones (teal = primary accent, gold =
      achievement/ornament, cream = page, dark-* = dark surfaces) so every
      existing utility re-skins from here. Values for dark mode + the other
@@ -348,6 +350,220 @@ html[data-palette='sage'].dark {
   --color-text-on-dark: #ece8df;
   --color-on-accent: #13170f;
   --color-track: rgba(236, 232, 223, 0.09);
+}
+
+/* Palettes added 2026-11-20. Same shape as brass/sage: the light block also
+   sets the night surfaces (always-dark cards), and the dark block re-sets
+   everything the light block changed (both blocks beat `html.dark`). */
+
+/* لازورد وذهب — the lapis and gold of an illuminated Mushaf, on ivory. */
+html[data-palette='lapis'] {
+  --tint: #14213d;
+  --color-cream: #f2f1ec;
+  --color-cream-dark: #e6e3da;
+  --color-cream-soft: #f9f8f4;
+  --color-teal: #274c96;
+  --color-teal-light: #3a64b0;
+  --color-teal-dark: #1b3670;
+  --color-gold: #b08a3e;
+  --color-gold-light: #d9bd7c;
+  --color-gold-dark: #85662a;
+  --color-track: #e3e0d6;
+  --color-text-primary: #141b2d;
+  --color-text-secondary: #454f68;
+  --color-text-muted: #7d8598;
+  --color-text-on-dark: #e8ecf5;
+  --color-on-accent: #ffffff;
+  --color-dark-bg: #070c1a;
+  --color-dark-surface: #0c1426;
+  --color-dark-card: #121d37;
+  --color-dark-border: #223154;
+}
+html[data-palette='lapis'].dark {
+  --tint: #000000;
+  --color-teal: #86a9ea;
+  --color-teal-light: #a9c3f2;
+  --color-teal-dark: #5f84c8;
+  --color-gold: #dfc07f;
+  --color-gold-light: #eed8a9;
+  --color-gold-dark: #b4934f;
+  --color-dark-bg: #070c1a;
+  --color-dark-surface: #0c1426;
+  --color-dark-card: #121d37;
+  --color-dark-border: #223154;
+  --color-text-secondary: #a9b3c9;
+  --color-text-muted: #7a8399;
+  --color-text-on-dark: #e8ecf5;
+  --color-on-accent: #0a1328;
+  --color-track: rgba(232, 236, 245, 0.09);
+}
+
+/* فيروز وخزف — turquoise tile on cool porcelain, saffron ornament. */
+html[data-palette='turquoise'] {
+  --tint: #0b3036;
+  --color-cream: #eef3f2;
+  --color-cream-dark: #e0e8e7;
+  --color-cream-soft: #f6f9f9;
+  --color-teal: #0c6f80;
+  --color-teal-light: #18899b;
+  --color-teal-dark: #08525f;
+  --color-gold: #b4863a;
+  --color-gold-light: #ddb873;
+  --color-gold-dark: #8a6424;
+  --color-track: #dde5e4;
+  --color-text-primary: #10232a;
+  --color-text-secondary: #3f5a61;
+  --color-text-muted: #75898e;
+  --color-text-on-dark: #e6f1f2;
+  --color-on-accent: #ffffff;
+  --color-dark-bg: #061318;
+  --color-dark-surface: #0b1c23;
+  --color-dark-card: #10262f;
+  --color-dark-border: #1d3a45;
+}
+html[data-palette='turquoise'].dark {
+  --tint: #000000;
+  --color-teal: #4cbccb;
+  --color-teal-light: #7dd3de;
+  --color-teal-dark: #2f97a7;
+  --color-gold: #e2b86f;
+  --color-gold-light: #efd09c;
+  --color-gold-dark: #b88e48;
+  --color-dark-bg: #061318;
+  --color-dark-surface: #0b1c23;
+  --color-dark-card: #10262f;
+  --color-dark-border: #1d3a45;
+  --color-text-secondary: #a3bcc2;
+  --color-text-muted: #74898e;
+  --color-text-on-dark: #e6f1f2;
+  --color-on-accent: #04181d;
+  --color-track: rgba(230, 241, 242, 0.09);
+}
+
+/* بنفسج الغروب — muted plum with an amber glow; aubergine nights. */
+html[data-palette='dusk'] {
+  --tint: #2a1c36;
+  --color-cream: #f4f1f2;
+  --color-cream-dark: #e9e3e7;
+  --color-cream-soft: #faf8f9;
+  --color-teal: #6b4a83;
+  --color-teal-light: #82619c;
+  --color-teal-dark: #523566;
+  --color-gold: #b8823a;
+  --color-gold-light: #e0b46e;
+  --color-gold-dark: #8b5e22;
+  --color-track: #e6dfe4;
+  --color-text-primary: #221a2a;
+  --color-text-secondary: #564b60;
+  --color-text-muted: #8a8094;
+  --color-text-on-dark: #efe9f3;
+  --color-on-accent: #ffffff;
+  --color-dark-bg: #100c15;
+  --color-dark-surface: #16111d;
+  --color-dark-card: #1f1828;
+  --color-dark-border: #32283e;
+}
+html[data-palette='dusk'].dark {
+  --tint: #000000;
+  --color-teal: #c2a3dc;
+  --color-teal-light: #d8c3ec;
+  --color-teal-dark: #9e7cbd;
+  --color-gold: #e7b56b;
+  --color-gold-light: #f2cf98;
+  --color-gold-dark: #bd8b45;
+  --color-dark-bg: #100c15;
+  --color-dark-surface: #16111d;
+  --color-dark-card: #1f1828;
+  --color-dark-border: #32283e;
+  --color-text-secondary: #b9aec5;
+  --color-text-muted: #857a91;
+  --color-text-on-dark: #efe9f3;
+  --color-on-accent: #1b1126;
+  --color-track: rgba(239, 233, 243, 0.09);
+}
+
+/* ورد وطين — muted terracotta-rose on blush paper; warm clay nights. */
+html[data-palette='clay'] {
+  --tint: #3b201b;
+  --color-cream: #f6f0eb;
+  --color-cream-dark: #ece0d8;
+  --color-cream-soft: #fbf8f5;
+  --color-teal: #a24e42;
+  --color-teal-light: #b9665a;
+  --color-teal-dark: #7d372e;
+  --color-gold: #b0863f;
+  --color-gold-light: #d9b981;
+  --color-gold-dark: #85622a;
+  --color-track: #e9ddd4;
+  --color-text-primary: #2a1a17;
+  --color-text-secondary: #5f4842;
+  --color-text-muted: #957f78;
+  --color-text-on-dark: #f3eae6;
+  --color-on-accent: #fffaf7;
+  --color-dark-bg: #150e0d;
+  --color-dark-surface: #1c1412;
+  --color-dark-card: #261b19;
+  --color-dark-border: #3b2b27;
+}
+html[data-palette='clay'].dark {
+  --tint: #000000;
+  --color-teal: #d39d88;
+  --color-teal-light: #e4b9a8;
+  --color-teal-dark: #b07a66;
+  --color-gold: #dcb878;
+  --color-gold-light: #ecd3a4;
+  --color-gold-dark: #b08f53;
+  --color-dark-bg: #150e0d;
+  --color-dark-surface: #1c1412;
+  --color-dark-card: #261b19;
+  --color-dark-border: #3b2b27;
+  --color-text-secondary: #c3aea7;
+  --color-text-muted: #917c75;
+  --color-text-on-dark: #f3eae6;
+  --color-on-accent: #2a120c;
+  --color-track: rgba(243, 234, 230, 0.09);
+}
+
+/* حبر وورق — graphite ink on paper, gold the only colour (minimal). */
+html[data-palette='ink'] {
+  --tint: #1d1d1f;
+  --color-cream: #f3f2ef;
+  --color-cream-dark: #e6e5e1;
+  --color-cream-soft: #faf9f7;
+  --color-teal: #2c2f33;
+  --color-teal-light: #474b51;
+  --color-teal-dark: #18191c;
+  --color-gold: #a7884a;
+  --color-gold-light: #d0b884;
+  --color-gold-dark: #7b6331;
+  --color-track: #e2e1dc;
+  --color-text-primary: #18191b;
+  --color-text-secondary: #4c4f54;
+  --color-text-muted: #83868b;
+  --color-text-on-dark: #ecebe8;
+  --color-on-accent: #ffffff;
+  --color-dark-bg: #0d0e0f;
+  --color-dark-surface: #141516;
+  --color-dark-card: #1b1c1e;
+  --color-dark-border: #2c2e31;
+}
+html[data-palette='ink'].dark {
+  --tint: #000000;
+  --color-teal: #c4c1ba;
+  --color-teal-light: #e0ddd7;
+  --color-teal-dark: #95928c;
+  --color-gold: #cdb07a;
+  --color-gold-light: #e2cfa6;
+  --color-gold-dark: #a38953;
+  --color-dark-bg: #0d0e0f;
+  --color-dark-surface: #141516;
+  --color-dark-card: #1b1c1e;
+  --color-dark-border: #2c2e31;
+  --color-text-secondary: #b2b1ad;
+  --color-text-muted: #838380;
+  --color-text-on-dark: #ecebe8;
+  --color-on-accent: #151515;
+  --color-track: rgba(236, 235, 232, 0.09);
 }
 
 /* High contrast wins over every palette (declared after them). */

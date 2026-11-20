@@ -115,8 +115,8 @@ export function BadgeGalleryPage() {
           <div className="relative flex items-center gap-4">
             <LevelSeal rank={lvl.level.rank} size={96} onDark />
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-gold-light/85">المستوى {toArabicDigits(lvl.level.rank)}</p>
-              <h1 className="font-display text-[26px] font-bold leading-tight text-text-on-dark text-balance">«{lvl.level.titleAr}»</h1>
+              <p className="text-xs text-gold-light/85">مستواك</p>
+              <h1 className="font-display text-[26px] font-bold leading-tight text-text-on-dark text-balance">المستوى {toArabicDigits(lvl.level.rank)}</h1>
               <p className="mt-1 text-xs text-text-on-dark/75">
                 {model.got > 0 ? `${badgesCount(model.got)} من ${toArabicDigits(model.total)}` : 'أول وسام ينتظرك'}
               </p>
@@ -126,7 +126,7 @@ export function BadgeGalleryPage() {
             <span className="font-counter tabular-nums font-bold text-gold-light">{toArabicDigits(model.points)} نقطة</span>
             <span className="text-text-on-dark/70">
               {lvl.next
-                ? `بقي ${toArabicDigits(lvl.next.min - model.points)} إلى «${lvl.next.titleAr}»`
+                ? `بقي ${toArabicDigits(lvl.next.min - model.points)} إلى المستوى ${toArabicDigits(lvl.next.rank)}`
                 : 'أعلى المستويات، بارك الله فيك'}
             </span>
           </div>

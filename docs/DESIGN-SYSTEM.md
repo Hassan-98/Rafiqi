@@ -5,11 +5,17 @@ This is the reference for every screen. The app is Arabic and always RTL. It use
 ## 1. Identity
 
 - **Tone.** Calm, dignified and premium, with light Islamic ornament. There is one focal element per screen, and ornament supports the content without competing with it.
-- **Palettes.** The user switches palette in «أنا → المظهر». Every colour comes from a token, so every screen must work in all six combinations:
+- **Palettes.** The user switches palette in «أنا → المظهر». Every colour comes from a token, so every screen must work in all sixteen combinations:
   - `emerald`, the default «زمرد محدث»: emerald accent with gold ornament.
+  - `turquoise`, «فيروز وخزف»: turquoise tile on cool porcelain, saffron ornament; petrol-blue nights.
+  - `lapis`, «لازورد وذهب»: the lapis and gold of an illuminated Mushaf on ivory; deep lapis nights.
+  - `dusk`, «بنفسج الغروب»: muted plum with amber; aubergine nights.
+  - `clay`, «ورد وطين»: muted terracotta-rose on blush paper; warm clay nights.
   - `brass`, «ليل ونحاس»: night-ink surfaces with a brass accent.
   - `sage`, «رمل ومريمية»: stone neutrals with a sage accent.
-  - Each palette has a light and a dark mode (`html.dark`; dark is the default).
+  - `ink`, «حبر وورق»: graphite ink on paper, gold the only colour (for minimal-colour tastes). In dark mode the accent is silver, so accent text reads close to body text: never rely on accent colour alone to mark a state.
+  - Each palette has a light and a dark mode (`html.dark`; dark is the default). In every dark mode except emerald the accent is light, so `text-on-accent` is dark ink.
+  - Adding one: a light + dark block in `src/index.css` (the light block also sets the night surfaces; the dark block re-sets everything the light one changed), plus `PREVIEW` and `PALETTE_OPTIONS` in `PalettePicker.tsx`.
 - **Never hardcode a hex colour** in components (`#1A6B5A`, `#fff` backgrounds and so on). Use tokens. An SVG `fill`/`stroke` should use `currentColor` plus a `text-*` class, or `var(--color-…)`.
 
 ## 2. Tokens (Tailwind utilities)
@@ -22,7 +28,7 @@ This is the reference for every screen. The app is Arabic and always RTL. It use
 | Primary accent | `teal`, `teal-light`, `teal-dark` | `text-teal dark:text-teal-light` for accent text |
 | Achievement / ornament | `gold`, `gold-light`, `gold-dark` | stars, streaks, records |
 | Ink | `text-text-primary dark:text-text-on-dark`, then `text-text-secondary`, then `text-text-muted` | |
-| **Text on accent fills** | `text-on-accent` (also `/70`, `/80`) | **never `text-white` on teal**: brass and sage dark need dark ink |
+| **Text on accent fills** | `text-on-accent` (also `/70`, `/80`) | **never `text-white` on teal**: every dark palette but emerald needs dark ink |
 | Status | `success`, `warning`, `danger`, `info` | |
 | Hairline ring | `ring-1 ring-black/[0.04] dark:ring-white/[0.06]` | prefer this to borders |
 

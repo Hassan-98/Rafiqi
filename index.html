@@ -22,7 +22,7 @@
       if (__st && __st.darkMode !== false) {
         document.documentElement.classList.add('dark');
       }
-      if (__st && (__st.palette === 'brass' || __st.palette === 'sage')) {
+      if (__st && typeof __st.palette === 'string' && __st.palette !== 'emerald') {
         document.documentElement.dataset.palette = __st.palette;
       }
     } catch (e) { /* first run / private mode — light default is fine */ }

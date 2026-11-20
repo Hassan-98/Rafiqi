@@ -41,7 +41,7 @@ export function BadgesHomeCard() {
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline justify-between gap-2">
               <span className="text-[15px] font-bold text-text-primary dark:text-text-on-dark truncate">
-                المستوى {toArabicDigits(lvl.level.rank)}، «{lvl.level.titleAr}»
+                المستوى {toArabicDigits(lvl.level.rank)}
               </span>
               <span className="shrink-0 font-counter tabular-nums text-[11px] text-gold-dark dark:text-gold-light font-bold">
                 {toArabicDigits(model.points)} نقطة
@@ -51,7 +51,7 @@ export function BadgesHomeCard() {
               <span className="block h-full rounded-full bg-[image:var(--gradient-gold)]" style={{ width: `${lvl.pct}%` }} />
             </span>
             <span className="mt-1 block text-[11px] text-text-muted">
-              {lvl.next ? `بقي ${toArabicDigits(lvl.next.min - model.points)} نقطة إلى «${lvl.next.titleAr}»` : 'أعلى المستويات'}
+              {lvl.next ? `بقي ${toArabicDigits(lvl.next.min - model.points)} نقطة إلى المستوى ${toArabicDigits(lvl.next.rank)}` : 'أعلى المستويات'}
             </span>
           </span>
         </button>

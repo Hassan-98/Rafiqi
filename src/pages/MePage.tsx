@@ -172,7 +172,7 @@ function ProfileHeader() {
             className="inline-flex items-center gap-1.5 rounded-full min-h-8 px-3 bg-on-accent/12 ring-1 ring-gold-light/45 text-[12px] font-bold hover:bg-on-accent/20 transition-colors"
           >
             <Award size={14} className="text-gold-light" aria-hidden />
-            المستوى {ar(level.level.rank)} · «{level.level.titleAr}»
+            المستوى {ar(level.level.rank)}
           </button>
           <span className="empty:hidden flex">
             <StandingChip onAccent named />

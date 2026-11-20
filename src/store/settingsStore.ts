@@ -17,7 +17,7 @@ const DEFAULT_MODULES: ModuleId[] = ['prayers', 'dhikr', 'quran', 'qiyam', 'fast
 /** Accessibility: body font scale. Maps to a root multiplier in index.css. */
 export type FontScale = 'small' | 'normal' | 'large';
 
-export type AppPalette = 'emerald' | 'brass' | 'sage';
+export type AppPalette = 'emerald' | 'turquoise' | 'lapis' | 'dusk' | 'clay' | 'brass' | 'sage' | 'ink';
 
 /** Tailors features: mosque/congregation for men, excused days + feminine adhkar wording for women. */
 export type Gender = 'male' | 'female';
@@ -27,7 +27,8 @@ interface SettingsState {
   /** null until the user picks (asked in onboarding, settings and the prayers module). */
   gender: Gender | null;
   darkMode: boolean;
-  /** Colour palette: زمرد محدث (default) · ليل ونحاس · رمل ومريمية. */
+  /** Colour palette (see PALETTE_OPTIONS / index.css); default زمرد محدث. An
+   *  unknown saved id just falls back to the default CSS. */
   palette: AppPalette;
   /** UI font (see src/data/appFonts.ts). Default Alan Sans. */
   appFont: AppFontId;

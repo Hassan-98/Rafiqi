@@ -47,6 +47,9 @@ export const LB = {
   fasting: 30,
   morning: 10,
   evening: 10,
+  /** On top of the morning / evening set: «لا إله إلا الله وحده لا شريك له…» ×100 (owner 2026-11-20:
+   *  long, takes time, and weighty) — 12 in all, pro rata to its count. */
+  tahlil: 2,
   sleep: 2,
   /** Per page of a ختمة read (تلاوة/تفسير) / listened, or of a session in مصحفي (2026-11-20) —
    *  reading outside both earns nothing. A session's page a khatma already counted that day counts once. */
@@ -124,8 +127,8 @@ export const LB_RULES: { title: string; rules: LbRule[] }[] = [
   {
     title: 'الأذكار والأوراد',
     rules: [
-      { label: 'أذكار الصباح', points: `${LB.morning}`, note: `المختصرة ${LB.morning / 2}` },
-      { label: 'أذكار المساء', points: `${LB.evening}`, note: `المختصرة ${LB.evening / 2}` },
+      { label: 'أذكار الصباح', points: `${LB.morning + LB.tahlil}`, note: `منها ${LB.tahlil} لـ«لا إله إلا الله وحده لا شريك له» مئة مرة · المختصرة ${LB.morning / 2}` },
+      { label: 'أذكار المساء', points: `${LB.evening + LB.tahlil}`, note: `منها ${LB.tahlil} لـ«لا إله إلا الله وحده لا شريك له» مئة مرة · المختصرة ${LB.evening / 2}` },
       { label: 'أذكار النوم', points: `${LB.sleep}` },
       { label: 'التسبيح، لكل مئة', points: `${LB.tasbih}`, note: `حتى ${LB.tasbihMax * 100} تسبيحة في اليوم` },
       { label: 'الوِرد، لكل دقيقة من وقته', points: `${LB.wirdPerMinute}`, note: 'عدده × طول نصّه، بلا حد' },
@@ -185,6 +188,8 @@ export interface DayScore {
 }
 
 const HEAVY: PrayerName[] = ['fajr', 'isha'];
+/** The ×100 «لا إله إلا الله وحده لا شريك له…» of each set (src/data/adhkar.ts ids). */
+const TAHLIL: Record<string, string> = { morning: 'morning-29', evening: 'evening-28' };
 const PERIOD_DAYS: Record<string, number> = { daily: 1, weekly: 7, monthly: 30 };
 const dk = (ts: number) => format(new Date(ts), 'yyyy-MM-dd');
 
@@ -284,7 +289,10 @@ export function scoreDay(s: ScoreInput, k: string): DayScore {
   const bump = (id: string, n: number) => reps.set(id, (reps.get(id) ?? 0) + n);
   for (const e of s.events) {
     if (e.dateKey !== k) continue;
-    if (e.domain === 'dhikr' && e.refId) bump(`dhikr:${e.refId}`, e.amount);
+    if (e.domain === 'dhikr' && e.refId) {
+      bump(`dhikr:${e.refId}`, e.amount);
+      if (e.subId && e.subId === TAHLIL[e.refId]) bump(`tahlil:${e.refId}`, e.amount);
+    }
     else if (e.domain === 'tasbih') bump('tasbih', e.amount);
     else if (e.domain === 'awrad' && e.refId) bump(`awrad:${e.refId}`, e.amount);
   }
@@ -297,10 +305,12 @@ export function scoreDay(s: ScoreInput, k: string): DayScore {
     const full = s.setReps?.[id];
     const brief = id === 'sleep' ? undefined : s.briefReps?.[id];
     const half = LB[id] / 2;
+    const tahlil = id === 'sleep' ? 0 : LB.tahlil * Math.min(1, (reps.get(`tahlil:${id}`) ?? 0) / 100);
     add(
       id,
       label,
-      n <= 0
+      tahlil +
+      (n <= 0
         ? 0
         : !full
           ? LB[id]
@@ -311,7 +321,7 @@ export function scoreDay(s: ScoreInput, k: string): DayScore {
               : n >= brief
                 ? half + (half * (n - brief)) / (full - brief)
                 : (half * n) / brief
-            : LB[id] * Math.min(1, n / full),
+            : LB[id] * Math.min(1, n / full)),
     );
   };
   set('morning', 'أذكار الصباح');

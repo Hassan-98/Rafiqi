@@ -833,27 +833,27 @@ export const TRACKS: BadgeTrack[] = (() => {
 export const TRACK_BY_METRIC = new Map(TRACKS.map((t) => [t.metric, t]));
 
 // ── Levels — every badge earns points by rarity ───────────────────────────
+/** No names (owner 2026-11-20: a title like «مخبت» praises the self) — only «المستوى N». */
 export interface Level {
   rank: number;
-  titleAr: string;
   /** Points needed to reach this level. */
   min: number;
 }
 
 export const LEVELS: Level[] = [
-  { rank: 1, titleAr: 'مبتدئ', min: 0 },
-  { rank: 2, titleAr: 'سالك', min: 40 },
-  { rank: 3, titleAr: 'مجتهد', min: 120 },
-  { rank: 4, titleAr: 'مداوم', min: 260 },
-  { rank: 5, titleAr: 'محافظ', min: 480 },
-  { rank: 6, titleAr: 'ذاكر', min: 800 },
-  { rank: 7, titleAr: 'قانت', min: 1250 },
-  { rank: 8, titleAr: 'منيب', min: 1850 },
-  { rank: 9, titleAr: 'مُخبِت', min: 2650 },
-  { rank: 10, titleAr: 'أوّاب', min: 3700 },
-  { rank: 11, titleAr: 'صابر', min: 5100 },
-  { rank: 12, titleAr: 'محسن', min: 7000 },
-  { rank: 13, titleAr: 'ربّاني', min: 10000 },
+  { rank: 1, min: 0 },
+  { rank: 2, min: 40 },
+  { rank: 3, min: 120 },
+  { rank: 4, min: 260 },
+  { rank: 5, min: 480 },
+  { rank: 6, min: 800 },
+  { rank: 7, min: 1250 },
+  { rank: 8, min: 1850 },
+  { rank: 9, min: 2650 },
+  { rank: 10, min: 3700 },
+  { rank: 11, min: 5100 },
+  { rank: 12, min: 7000 },
+  { rank: 13, min: 10000 },
 ];
 
 /** Total points of the given unlocked badge ids (only those offered to `gender`, when given). */

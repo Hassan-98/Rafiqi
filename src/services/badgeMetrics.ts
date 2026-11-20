@@ -72,7 +72,7 @@ export interface BadgeSnapshot {
   qiyam: Record<string, { rakaat: number; witr: boolean; loggedAt: number }>;
   /** Night keys logged inside the last third of the night (needs prayer times — precomputed). */
   lastThirdNights: string[];
-  events: { ts: number; dateKey: string; domain: string; refId?: string; amount: number }[];
+  events: { ts: number; dateKey: string; domain: string; refId?: string; subId?: string; amount: number }[];
   tasbihLifetime: number;
   /** Wird pages per day (lifetime) and distinct reader pages per day (last ~120 days). */
   wirdPages: Record<string, number>;

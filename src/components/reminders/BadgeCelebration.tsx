@@ -112,7 +112,7 @@ export function BadgeCelebration() {
                 <div className="min-w-0">
                   <p className="text-[11px] text-gold-light">ارتقيتَ مستوى</p>
                   <p className="font-display text-lg font-bold leading-tight">
-                    المستوى {toArabicDigits(level.rank)}، «{level.titleAr}»
+                    المستوى {toArabicDigits(level.rank)}
                   </p>
                 </div>
               </div>

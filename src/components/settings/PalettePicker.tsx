@@ -13,6 +13,22 @@ const PREVIEW: Record<AppPalette, Record<'light' | 'dark', { bg: string; card: s
     light: { bg: '#f4f0e6', card: '#ffffff', accent: '#11725c', gold: '#b8923f' },
     dark: { bg: '#08120f', card: '#132520', accent: '#2a9d7f', gold: '#d4b26a' },
   },
+  turquoise: {
+    light: { bg: '#eef3f2', card: '#ffffff', accent: '#0c6f80', gold: '#b4863a' },
+    dark: { bg: '#061318', card: '#10262f', accent: '#4cbccb', gold: '#e2b86f' },
+  },
+  lapis: {
+    light: { bg: '#f2f1ec', card: '#ffffff', accent: '#274c96', gold: '#b08a3e' },
+    dark: { bg: '#070c1a', card: '#121d37', accent: '#86a9ea', gold: '#dfc07f' },
+  },
+  dusk: {
+    light: { bg: '#f4f1f2', card: '#ffffff', accent: '#6b4a83', gold: '#b8823a' },
+    dark: { bg: '#100c15', card: '#1f1828', accent: '#c2a3dc', gold: '#e7b56b' },
+  },
+  clay: {
+    light: { bg: '#f6f0eb', card: '#ffffff', accent: '#a24e42', gold: '#b0863f' },
+    dark: { bg: '#150e0d', card: '#261b19', accent: '#d39d88', gold: '#dcb878' },
+  },
   brass: {
     light: { bg: '#f3eee3', card: '#ffffff', accent: '#8a6430', gold: '#b88a45' },
     dark: { bg: '#0b0f1a', card: '#172036', accent: '#c9a36a', gold: '#e3c58e' },
@@ -21,18 +37,28 @@ const PREVIEW: Record<AppPalette, Record<'light' | 'dark', { bg: string; card: s
     light: { bg: '#f4f1ea', card: '#ffffff', accent: '#56715a', gold: '#a9844a' },
     dark: { bg: '#141311', card: '#22211d', accent: '#93b096', gold: '#d2b27c' },
   },
+  ink: {
+    light: { bg: '#f3f2ef', card: '#ffffff', accent: '#2c2f33', gold: '#a7884a' },
+    dark: { bg: '#0d0e0f', card: '#1b1c1e', accent: '#c4c1ba', gold: '#cdb07a' },
+  },
 };
 
+/** Ordered round the colour wheel (green → blue → violet → rose → amber), ink last. */
 export const PALETTE_OPTIONS: { id: AppPalette; label: string; hint: string }[] = [
   { id: 'emerald', label: 'زمرد', hint: 'زمرّد وذهب' },
+  { id: 'turquoise', label: 'فيروز وخزف', hint: 'فيروز البلاط وخزف أبيض' },
+  { id: 'lapis', label: 'لازورد وذهب', hint: 'لازورد المصاحف وذهبها' },
+  { id: 'dusk', label: 'بنفسج الغروب', hint: 'بنفسج خافت وكهرمان' },
+  { id: 'clay', label: 'ورد وطين', hint: 'طين دافئ وورد هادئ' },
   { id: 'brass', label: 'ليل ونحاس', hint: 'حبر الليل ونحاس دافئ' },
   { id: 'sage', label: 'رمل ومريمية', hint: 'حجر هادئ ومريمية' },
+  { id: 'ink', label: 'حبر وورق', hint: 'حبر هادئ ولمسة ذهب' },
 ];
 
 /**
- * Palette picker: three miniature screens (page · card · accent · gold star)
- * drawn in the current light/dark mode. `compact` drops the hint line (used
- * in onboarding).
+ * Palette picker: a miniature screen per palette (page · card · accent · gold
+ * star) drawn in the current light/dark mode. `compact` drops the hint line
+ * (used on «أنا» and in onboarding).
  */
 export function PalettePicker({ compact = false }: { compact?: boolean }) {
   const palette = useSettingsStore((s) => s.palette);
@@ -40,7 +66,7 @@ export function PalettePicker({ compact = false }: { compact?: boolean }) {
   const mode = useSettingsStore((s) => (s.darkMode ? 'dark' : 'light'));
 
   return (
-    <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="لوحة الألوان">
+    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5" role="radiogroup" aria-label="لوحة الألوان">
       {PALETTE_OPTIONS.map((p) => {
         const on = palette === p.id;
         const c = PREVIEW[p.id][mode];

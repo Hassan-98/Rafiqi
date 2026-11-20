@@ -7,7 +7,7 @@ import { motion } from '@/lib/motion';
  *  - elevated   plain + deeper shadow (hover lift)
  *  - inset      recessed well inside a page or card (no shadow)
  *  - glass      translucent over imagery
- *  - hero       the accent (emerald/brass/sage) surface with the etched lattice
+ *  - hero       the palette's accent surface with the etched lattice
  *  - gradient-edge  warm ornate panel with a gold ring + lattice (module heroes)
  *  - gold-rim   plain with a gold top keyline (highlighted item)
  *  - night      deep night surface

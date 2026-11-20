@@ -13,7 +13,6 @@ import { FridayReviewHomeCard } from '@/components/friday/FridayReviewHomeCard';
 import { TodayGlance } from '@/components/home/TodayGlance';
 import { CalendarTodayCard } from '@/components/home/CalendarTodayCard';
 import { AttentionCard } from '@/components/home/AttentionCard';
-import { AchievementsStrip } from '@/components/home/AchievementsStrip';
 import { BadgesHomeCard } from '@/components/badges/BadgesHomeCard';
 import { HarvestHomeCard, LeaderboardHomeCard, StandingChip } from '@/components/leaderboard/LeaderboardCards';
 import { CrownMark, useMyEmblem } from '@/components/crowns/CrownEmblem';
@@ -161,9 +160,6 @@ export function HomePage() {
         />
         <ReflectionCard />
       </section>
-
-      {/* ── Prayer badges, records and streak events — up front ── */}
-      <AchievementsStrip />
 
 
 
