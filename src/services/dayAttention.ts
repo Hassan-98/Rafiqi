@@ -5,21 +5,33 @@
  *           yesterday's until Dhuhr (the owner forgets to log). Only for users
  *           who log their prayers; for anyone else it would be noise.
  *  closing  something the user USUALLY does, still undone, whose time is
- *           running out: the running prayer, morning/evening adhkar, الضحى,
- *           the night's قيام, the Qur'an wird and the daily أوراد.
+ *           running out: the running prayer (earlier on a weekday it is often
+ *           missed), morning/evening adhkar, الضحى, the night's قيام, the
+ *           Qur'an wird, the daily أوراد, and the سحور of a fast they intend.
  *  suggest  ONE sunnah the user SELDOM does, while its time is open — or a
- *           sunnah of the day itself (Friday's الكهف and last hour, tomorrow's
- *           fast). A habit is either closing or suggested, never both.
- *           For a woman, also her everyday house chores from 2 pm until logged.
+ *           sunnah of the day itself (Friday's الكهف from Thursday's Maghrib,
+ *           its last hour). A habit is either closing or suggested, never both.
+ *  prep     tomorrow: a fast to intend (Mon/Thu, white days, Arafah, Ashura and
+ *           Tasu'a, Shawwal's six, the first nine of Dhul-Hijjah), and a season
+ *           announced ahead (Ramadan, the last ten, the ten of Dhul-Hijjah).
+ *  + every registered source (services/attention/registry.ts): house chores,
+ *    and whatever features plug in.
  *
- * `habitRates` (how often each sunnah was done lately) and `SUNNAH_COPY` are
- * shared with the notification companion so both speak with one voice.
- * Checked by scripts/dayAttention.test.ts.
+ * Each item is scored (importance × urgency × the user's own habit × freshness)
+ * and carries its «لماذا؟»; `presentAttention` turns the list into one «الآن»
+ * focus and the groups «قبل أن يفوت» / «استعدّ للغد».
+ *
+ * `habitRates` and `SUNNAH_COPY` are shared with the notification companion
+ * so both speak with one voice. Checked by scripts/dayAttention.test.ts.
  */
 import { addDays, differenceInCalendarDays, format } from 'date-fns';
-import { arCount, hijriDay, type InsightsSnapshot } from '@/services/insightsEngine';
+import { arCount, type InsightsSnapshot } from '@/services/insightsEngine';
 import { WEEKDAY_LABELS_AR, toArabicDigits } from '@/services/statsService';
 import { duhaWindow, isJumuah, sunnahRakaatOn } from '@/store/prayerLogStore';
+import { toHijri } from '@/services/HijriService';
+import { collectAttention, type SourceContext } from '@/services/attention/registry';
+import { fastReason, seasonNotice } from '@/services/attention/occasions';
+import { weakWeekdays } from '@/services/attention/learning';
 import type { PrayerName } from '@/types';
 
 export interface DayTimes {
@@ -45,30 +57,75 @@ export type HabitKey =
   | 'kahf'
   | 'fridayHour';
 
-export type AttentionLevel = 'missed' | 'closing' | 'suggest';
-export type AttentionIcon = 'prayer' | 'morning' | 'evening' | 'sleep' | 'duha' | 'qiyam' | 'quran' | 'awrad' | 'fasting' | 'mosque' | 'sadaqah' | 'friday' | 'house';
+/** missed = it has passed · closing = it's running out · suggest = an open door · prep = tomorrow. */
+export type AttentionLevel = 'missed' | 'closing' | 'suggest' | 'prep';
+export type AttentionIcon =
+  | 'prayer'
+  | 'morning'
+  | 'evening'
+  | 'sleep'
+  | 'duha'
+  | 'qiyam'
+  | 'quran'
+  | 'awrad'
+  | 'fasting'
+  | 'mosque'
+  | 'sadaqah'
+  | 'friday'
+  | 'house'
+  | 'season'
+  | 'people'
+  | 'task';
 
 export type AttentionAction =
   | { kind: 'prayers'; dateKey: string; prayers: PrayerName[] }
   | { kind: 'duha'; dateKey: string }
   | { kind: 'qiyam' }
   | { kind: 'sunnah'; dateKey: string; prayer: PrayerName; type: 'sunnahBefore' | 'sunnahAfter' }
-  | { kind: 'chores'; chores: string[] };
+  | { kind: 'chores'; chores: string[] }
+  /** «سأصومه بإذن الله» — remembers the intent (the suhoor reminder follows it). */
+  | { kind: 'intent'; dateKey: string }
+  /** A source's own one-tap chip: `run` does the deed (log it, mark it…); the card refreshes after. */
+  | { kind: 'run'; label: string; run: () => void };
 
+/** How much the deed weighs. */
+export type AttentionWeight = 'fard' | 'sunnah' | 'extra';
+
+/**
+ * One line on Home. A source fills the content fields; the engine fills
+ * `score` (unless given) and completes `why` with the streak and time left.
+ */
 export interface AttentionItem {
-  /** Stable for the fact (a dismissal hides it for the day). */
+  /** Stable for the fact through the day: «ليس الآن» hides this id until tomorrow. */
   id: string;
+  /** The tone (red / gold / teal / sage) and the group: 'prep' → «استعدّ للغد», the rest → «قبل أن يفوت». */
   level: AttentionLevel;
   icon: AttentionIcon;
+  /** The small line above the title: «يوشك وقتها أن يخرج». */
   kicker: string;
   title: string;
+  /** One or two lines — an authentic text or the facts; no guilt. */
   body: string;
+  /** In-app route opened by tapping the title. */
   to: string;
-  /** Live countdown target («ينتهي بعد …»). */
+  /** When it stops being possible — drives urgency and «بقي …». */
   deadline?: Date;
+  /** The one-tap chips. */
   action?: AttentionAction;
-  /** Suggestions: the key «لا تقترحها» mutes ('house' = the chores reminder). */
-  habit?: HabitKey | 'house';
+  /** The mute key «لا تقترحها» stores (a HabitKey, 'house', 'seasons', or a source's own). Absent = no mute button. */
+  habit?: string;
+  /** Importance: fard > sunnah > extra (default 'extra'). */
+  weight?: AttentionWeight;
+  /** «لماذا؟»: the reason, e.g. «لأنك تصليها عادةً» — the engine appends the streak and the time left. */
+  why?: string;
+  /** The user's own share of recent days doing this (0–1): personal relevance. */
+  rate?: number;
+  /** Days in a row at stake. */
+  streak?: number;
+  /** When it became true (its window opened, its time ran out) — fresher scores a little higher. */
+  since?: Date;
+  /** Higher = more deserving. Computed by the engine unless a source sets it. */
+  score?: number;
 }
 
 export interface AttentionInput {
@@ -76,7 +133,10 @@ export interface AttentionInput {
   now: Date;
   /** Today's prayer times (null without a location). */
   times: DayTimes | null;
+  /** Prayer times of any day, for the sources (defaults to today's only). */
+  timesOf?: (day: Date) => DayTimes | null;
   male?: boolean;
+  gender?: 'male' | 'female' | null;
   /** Qur'an pages still owed today (null = no wird). */
   quranOwe?: number | null;
   /** مصحفي pages read today (سورة الكهف on Friday). */
@@ -85,12 +145,11 @@ export interface AttentionInput {
   muted?: readonly string[];
   /** Item ids dismissed for today (the next suggestion takes a hidden one's place). */
   hidden?: readonly string[];
-  /** «مهام المنزل» log — pass it for a woman only. */
-  house?: readonly { chore: string; day: string }[];
+  /** The user's Hijri sighting offset (calendar settings). */
+  hijriOffset?: number;
+  /** The day the user said they will fast («سأصومه»). */
+  fastIntent?: string | null;
 }
-
-/** The everyday chores Home reminds her of (owner 2026-11-16). */
-export const DAILY_CHORES = ['cook', 'dishes', 'clean'];
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const MIN = 60_000;
@@ -104,6 +163,7 @@ const END_NAME: Record<PrayerName, string> = { fajr: 'الشروق', dhuhr: 'ا�
 export const KAHF_PAGES: [number, number] = [293, 304];
 
 const minutes = (n: number) => arCount(n, 'دقيقة', 'دقيقتان', 'دقائق', 'دقيقة');
+const daysN = (n: number) => arCount(n, 'يوم واحد', 'يومان', 'أيام', 'يوماً');
 /** «٢٥ دقيقة» / «ساعة و١٠ دقائق». */
 export function leftLabel(ms: number): string {
   const total = Math.max(1, Math.round(ms / MIN));
@@ -122,6 +182,16 @@ export function prayerEnd(t: DayTimes, p: PrayerName): Date {
     return new Date(t.maghrib.getTime() + (nextFajr - t.maghrib.getTime()) / 2);
   }
   return t[PRAYERS[PRAYERS.indexOf(p) + 1]];
+}
+
+/** Consecutive days in `set` ending YESTERDAY (today is still open). */
+export function chainBefore(set: Set<string>, now: Date): number {
+  let n = 0;
+  for (let i = 1; i < 800; i++) {
+    if (set.has(dk(addDays(now, -i)))) n++;
+    else break;
+  }
+  return n;
 }
 
 // ── how often each sunnah is done ─────────────────────────────────────────
@@ -239,22 +309,30 @@ export const SUNNAH_COPY: Record<HabitKey, { title: string; body: string; to: st
   },
 };
 
-/** Hijri 13–15: الأيام البيض. */
-export const isWhiteDay = (d: Date) => {
-  const h = hijriDay(d);
-  return h != null && h >= 13 && h <= 15;
-};
-
-/** Tomorrow's voluntary fast (Monday / Thursday / a white day), with its line — or null. */
-export function fastTomorrow(now: Date): { title: string; body: string } | null {
-  const t = addDays(now, 1);
-  if (isWhiteDay(t)) {
-    return { title: 'غداً من الأيام البيض', body: '«صيام ثلاثة أيام من كل شهر صيام الدهر كله» — انوِ وتسحّر' };
-  }
-  const wd = t.getDay();
-  if (wd === 1 || wd === 4) return { title: `غداً ${WEEKDAY_LABELS_AR[wd]} — صيام مستحب`, body: SUNNAH_COPY.fasting.body };
-  return null;
+/** What «لا تقترحها» muted, in words (settings). */
+export function muteLabel(h: string): string {
+  if (h === 'house') return 'تذكير مهام المنزل';
+  if (h === 'seasons') return 'مواسم الطاعة';
+  if (h === 'silat') return 'تذكير صلة الرحم';
+  if (h === 'qada') return 'تذكير القضاء';
+  return SUNNAH_COPY[h as HabitKey]?.title ?? h;
 }
+
+/** The six of Shawwal already fasted this Shawwal. */
+function sixOfShawwalDone(snap: InsightsSnapshot, now: Date, offset: number): boolean {
+  const h = toHijri(now, offset);
+  if (h.month !== 10) return false;
+  let n = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = addDays(now, -i);
+    const t = toHijri(d, offset);
+    if (t.month !== 10 || t.year !== h.year) break;
+    if (snap.dailyProgress[dk(d)]?.modules.some((m) => m.moduleId === 'fasting' && m.completed)) n++;
+  }
+  return n >= 6;
+}
+
+const habitWhy = (r: number) => (r >= 0.8 ? 'لأنك لا تكاد تتركها' : r >= 0.5 ? 'لأنك تحافظ عليها في أغلب أيامك' : 'لأنك اعتدتها مؤخراً');
 
 // ── the list ───────────────────────────────────────────────────────────────
 export function dayAttention(input: AttentionInput): AttentionItem[] {
@@ -267,17 +345,22 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
   const events = snap.activity ?? [];
   const muted = new Set(input.muted ?? []);
   const hidden = new Set(input.hidden ?? []);
-  const rates = habitRates(snap, now, input.male);
+  const offset = input.hijriOffset ?? 0;
+  const male = input.gender ? input.gender === 'male' : !!input.male;
+  const rates = habitRates(snap, now, male);
   const rare = (h: HabitKey) => (rates[h] ?? 0) < RARE;
   const out: AttentionItem[] = [];
   const dhikrToday = (ref: string) => events.some((e) => e.domain === 'dhikr' && e.refId === ref && e.dateKey === today);
+  const dhikrDays = (ref: string) => new Set(events.filter((e) => e.domain === 'dhikr' && e.refId === ref).map((e) => e.dateKey));
   const within = (a: Date, b: Date) => at >= a.getTime() && at < b.getTime();
   const fard = (k: string, p: PrayerName) => !!log[k]?.[p]?.fard;
+  const prayerChain = (p: PrayerName) => chainBefore(new Set(Object.keys(log).filter((k) => log[k]?.[p]?.fard)), now);
 
   // Logs prayers: three of the last seven days, or any of today.
   const lastWeek = Array.from({ length: 7 }, (_, i) => dk(addDays(now, -(i + 1))));
   const logger = lastWeek.filter((k) => PRAYERS.some((p) => fard(k, p))).length >= 3 || PRAYERS.some((p) => fard(today, p));
   const prayToday = logger && !excused[today];
+  const loggerWhy = 'لأنك تسجّل صلواتك عادةً';
 
   // ── missed: yesterday's (until Dhuhr) ──
   if (logger && !excused[yesterday] && (!T || at < T.dhuhr.getTime())) {
@@ -287,12 +370,14 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: `missed.yesterday.${list.join('-')}`,
         level: 'missed',
+        weight: 'fard',
         icon: 'prayer',
         kicker: 'من صلوات أمس',
         title: list.length === 1 ? `لم تُسجَّل ${NAME[list[0]]} أمس` : `لم تُسجَّل ${arCount(list.length, 'صلاة', 'صلاتان', 'صلوات', 'صلاة')} من أمس`,
         body: 'إن كنت صلّيتها فسجّلها لتصدق أرقامك، وما فاتك فاقضِه — «فليصلّها إذا ذكرها»',
         to: '/module/prayers',
         action: { kind: 'prayers', dateKey: yesterday, prayers: list },
+        why: loggerWhy,
       });
     }
   }
@@ -305,23 +390,28 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
         out.push({
           id: `missed.today.${list.join('-')}`,
           level: 'missed',
+          weight: 'fard',
           icon: 'prayer',
           kicker: 'خرج وقتها',
           title: list.length === 1 ? `لم تُسجَّل صلاة ${NAME[list[0]]}` : `لم تُسجَّل ${arCount(list.length, 'صلاة', 'صلاتان', 'صلوات', 'صلاة')} اليوم`,
           body: 'إن صلّيتها فسجّلها بلمسة، وإن فاتتك فاقضِها الآن — «فليصلّها إذا ذكرها»',
           to: '/module/prayers',
           action: { kind: 'prayers', dateKey: today, prayers: list },
+          why: loggerWhy,
+          since: prayerEnd(T, list[list.length - 1]),
         });
       }
 
-      // ── closing: the running prayer in its last 40 minutes ──
+      // ── closing: the running prayer in its last 40 minutes (75 on a weekday it is often missed) ──
       const cur = [...PRAYERS].reverse().find((p) => T[p].getTime() <= at);
       if (cur && !fard(today, cur)) {
         const end = prayerEnd(T, cur);
-        if (end.getTime() > at && end.getTime() - at <= 40 * MIN) {
+        const weak = weakWeekdays(log, excused, now, cur).has(now.getDay());
+        if (end.getTime() > at && end.getTime() - at <= (weak ? 75 : 40) * MIN) {
           out.push({
             id: `closing.prayer.${cur}`,
             level: 'closing',
+            weight: 'fard',
             icon: 'prayer',
             kicker: 'يوشك وقتها أن يخرج',
             title: `صلاة ${NAME[cur]}`,
@@ -329,6 +419,8 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
             to: '/module/prayers',
             deadline: end,
             action: { kind: 'prayers', dateKey: today, prayers: [cur] },
+            why: weak ? `لأنها قد تفوتك يوم ${WEEKDAY_LABELS_AR[now.getDay()]}` : undefined,
+            streak: prayerChain(cur),
           });
         }
       }
@@ -339,6 +431,7 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: 'closing.prayer.isha-night',
         level: 'closing',
+        weight: 'fard',
         icon: 'prayer',
         kicker: 'لم تُسجَّل بعد',
         title: 'صلاة العشاء',
@@ -350,38 +443,67 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
     }
 
     // ── closing: what the user usually does, in its last stretch ──
-    const habitClosing = (h: HabitKey, from: Date, end: Date, kicker: string, body: string, action?: AttentionAction) => {
+    const habitClosing = (h: HabitKey, from: Date, end: Date, kicker: string, body: string, streak: number, action?: AttentionAction) => {
       if (rare(h) || !within(from, end)) return;
-      out.push({ id: `closing.${h}`, level: 'closing', icon: SUNNAH_COPY[h].icon, kicker, title: SUNNAH_COPY[h].title, body, to: SUNNAH_COPY[h].to, deadline: end, action });
+      const c = SUNNAH_COPY[h];
+      out.push({ id: `closing.${h}`, level: 'closing', weight: 'sunnah', icon: c.icon, kicker, title: c.title, body, to: c.to, deadline: end, action, why: habitWhy(rates[h] ?? 0), rate: rates[h], streak, since: from });
     };
-    if (!dhikrToday('morning')) {
-      habitClosing('morning', new Date(T.dhuhr.getTime() - 90 * MIN), T.dhuhr, 'قبل الظهر', 'لم تقرأها اليوم بعد، وحصنك ليومك قبل أن ينتصف');
-    }
-    if (!dhikrToday('evening')) {
-      habitClosing('evening', new Date(T.maghrib.getTime() - 60 * MIN), T.maghrib, 'قبل الغروب', 'لم تقرأها اليوم بعد، وأفضل وقتها قبل الغروب');
+    // Morning / evening adhkar: on Home for EVERYONE through their time until read
+    // (owner 2026-11-18) — «وقتها الآن», then closing in the last stretch.
+    const setItem = (h: 'morning' | 'evening', from: Date, end: Date, closeFrom: Date, kicker: string, closingBody: string) => {
+      if (dhikrToday(h) || !within(from, end)) return;
+      const c = SUNNAH_COPY[h];
+      const closing = at >= closeFrom.getTime() && at < end.getTime();
+      out.push({
+        id: `adhkar.${h}`,
+        level: closing ? 'closing' : 'suggest',
+        weight: 'sunnah',
+        icon: c.icon,
+        kicker: closing ? kicker : 'وقتها الآن',
+        title: c.title,
+        body: closing ? closingBody : c.body,
+        to: c.to,
+        deadline: end,
+        why: closing ? 'لأن وقتها يوشك أن ينتهي' : 'لأنها حصنك في يومك',
+        rate: rates[h],
+        streak: chainBefore(dhikrDays(h), now),
+        since: from,
+      });
+    };
+    setItem('morning', T.fajr, T.dhuhr, new Date(T.dhuhr.getTime() - 90 * MIN), 'قبل الظهر', 'لم تقرأها اليوم بعد، وحصنك ليومك قبل أن ينتصف');
+    if (at < T.maghrib.getTime()) {
+      setItem('evening', T.asr, T.maghrib, new Date(T.maghrib.getTime() - 60 * MIN), 'قبل الغروب', 'لم تقرأها اليوم بعد، وأفضل وقتها قبل الغروب');
+    } else {
+      setItem('evening', T.maghrib, T.isha, T.isha, 'قبل العشاء', '');
     }
     const duhaWin = duhaWindow(T);
     if (!excused[today] && !snap.duha?.[today]) {
-      habitClosing('duha', new Date(duhaWin.end.getTime() - 45 * MIN), duhaWin.end, 'يوشك وقتها أن ينتهي', 'قبل أن يقوم قائم الظهيرة — ركعتان تكفيان', {
+      habitClosing('duha', new Date(duhaWin.end.getTime() - 45 * MIN), duhaWin.end, 'يوشك وقتها أن ينتهي', 'قبل أن يقوم قائم الظهيرة — ركعتان تكفيان', chainBefore(new Set(Object.keys(snap.duha ?? {})), now), {
         kind: 'duha',
         dateKey: today,
       });
     }
     // The night belongs to its evening: before noon that is yesterday.
     if (!excused[yesterday] && at < T.fajr.getTime() && !snap.qiyamNights[yesterday]) {
-      habitClosing('qiyam', new Date(T.fajr.getTime() - 60 * MIN), T.fajr, 'آخر الليل', 'قبل أن يطلع الفجر — ولو ركعة الوتر', { kind: 'qiyam' });
+      const nights = new Set(Object.keys(snap.qiyamNights));
+      // The night of «yesterday» is still running: its chain ends the night before.
+      habitClosing('qiyam', new Date(T.fajr.getTime() - 60 * MIN), T.fajr, 'آخر الليل', 'قبل أن يطلع الفجر — ولو ركعة الوتر', chainBefore(nights, addDays(now, -1)), { kind: 'qiyam' });
     }
     const midnight = new Date(`${dk(addDays(now, 1))}T00:00:00`);
     if (input.quranOwe && at >= T.isha.getTime()) {
+      const wh = snap.wirdHistory ?? {};
       out.push({
         id: 'closing.quran',
         level: 'closing',
+        weight: 'sunnah',
         icon: 'quran',
         kicker: 'قبل أن ينتهي يومك',
         title: `بقي من وردك ${arCount(input.quranOwe, 'صفحة واحدة', 'صفحتان', 'صفحات', 'صفحة')}`,
         body: '«أحبّ الأعمال إلى الله أدومها وإن قلّ»',
         to: '/quran',
         deadline: midnight,
+        why: 'لأنه وِردٌ التزمته',
+        streak: chainBefore(new Set(Object.keys(wh).filter((k) => (wh[k]?.achieved ?? 0) >= (wh[k]?.amount ?? 1))), now),
       });
     }
     const awrad = (snap.targets ?? []).filter((t) => t.recurrence === 'daily' && !t.completedAt && t.current < t.total);
@@ -389,6 +511,7 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
       out.push({
         id: 'closing.awrad',
         level: 'closing',
+        weight: 'extra',
         icon: 'awrad',
         kicker: 'قبل أن ينتهي يومك',
         title: awrad.length === 1 ? `وِردك: ${awrad[0].title}` : `بقي ${arCount(awrad.length, 'وِرد', 'وِردان', 'أوراد', 'وِرداً')} لم تكتمل`,
@@ -398,17 +521,63 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
           .join('، '),
         to: awrad.length === 1 ? `/targets/${awrad[0].id}` : '/targets',
         deadline: midnight,
+        why: 'لأنها أورادٌ التزمتها',
+        streak: Math.max(0, ...awrad.map((t) => t.streak ?? 0)),
       });
     }
 
+    // ── a fast: intend it tonight, take the suhoor before Fajr ──
+    const fastOn = (d: Date) => fastReason(d, offset, sixOfShawwalDone(snap, now, offset));
+    const fasts = !rare('fasting');
+    const intended = (k: string) => input.fastIntent === k;
+    if (!excused[today] && !muted.has('fasting')) {
+      const tomorrow = dk(addDays(now, 1));
+      const r = at >= T.asr.getTime() ? fastOn(addDays(now, 1)) : null;
+      if (r) {
+        const sure = intended(tomorrow);
+        out.push({
+          id: `prep.fast.${tomorrow}`,
+          level: 'prep',
+          weight: 'sunnah',
+          icon: 'fasting',
+          kicker: sure ? 'نويتَ صيامه، تقبّل الله' : 'انوِ من الليل',
+          title: r.eve,
+          body: sure ? 'تسحّر ولو بجرعة ماء — «تسحّروا فإن في السحور بركة»' : r.body,
+          to: '/module/fasting',
+          habit: 'fasting',
+          action: sure ? undefined : { kind: 'intent', dateKey: tomorrow },
+          why: sure ? 'نذكّرك بالسحور قبل الفجر' : fasts ? 'لأنك تصوم أمثاله' : r.major ? 'لفضل صيامه' : 'لأن النية تُبيَّت من الليل',
+          rate: rates.fasting,
+        });
+      }
+      // The fast day itself, before dawn: its suhoor.
+      const todayFast = intended(today) || (fasts && fastOn(now));
+      if (todayFast && within(new Date(T.fajr.getTime() - 90 * MIN), T.fajr)) {
+        out.push({
+          id: 'closing.suhoor',
+          level: 'closing',
+          weight: 'sunnah',
+          icon: 'fasting',
+          kicker: 'قبل أذان الفجر',
+          title: 'السحور',
+          body: '«تسحّروا فإن في السحور بركة» — وتعجيل الفطر وتأخير السحور من السنة',
+          to: '/module/fasting',
+          deadline: T.fajr,
+          habit: 'fasting',
+          why: intended(today) ? 'لأنك نويت صيام اليوم' : 'لأنك تصوم أمثاله',
+        });
+      }
+    }
+
     // ── suggest: one sunnah, while its time is open ──
+    const open = 'لأنها تغيب عنك مؤخراً، ووقتها مفتوح الآن';
     const cands: { h: HabitKey; rank: number; end?: Date; item?: Partial<AttentionItem> }[] = [];
     const seldom = (h: HabitKey, end: Date | undefined, item?: Partial<AttentionItem>) => {
-      if (rare(h)) cands.push({ h, rank: rates[h] ?? 0, end, item });
+      if (rare(h)) cands.push({ h, rank: rates[h] ?? 0, end, item: { why: end ? open : 'لأنها تغيب عنك مؤخراً', ...item } });
     };
     const prayOk = !excused[today];
     if (prayOk && !snap.duha?.[today] && within(duhaWin.start, duhaWin.end)) {
-      seldom('duha', duhaWin.end, { action: { kind: 'duha', dateKey: today } });
+      seldom('duha', duhaWin.end, { action: { kind: 'duha', dateKey: today }, since: duhaWin.start });
     }
     const nightKey = at < new Date(`${today}T12:00:00`).getTime() ? yesterday : today;
     const nightEnd = at < T.fajr.getTime() ? T.fajr : new Date(T.fajr.getTime() + 24 * 60 * MIN);
@@ -420,62 +589,138 @@ export function dayAttention(input: AttentionInput): AttentionItem[] {
     const cur = [...PRAYERS].reverse().find((p) => T[p].getTime() <= at);
     if (prayOk && cur && cur !== 'fajr' && at - T[cur].getTime() < 60 * MIN) {
       const e = log[today]?.[cur];
-      const sun = sunnahRakaatOn(cur, today, !!input.male);
+      const sun = sunnahRakaatOn(cur, today, male);
       const type = sun.before && !e?.fard && !e?.sunnahBefore ? 'sunnahBefore' : sun.after && !e?.sunnahAfter ? 'sunnahAfter' : null;
       if (type) {
         const n = sun[type === 'sunnahBefore' ? 'before' : 'after'];
-        const jumuah = cur === 'dhuhr' && isJumuah(today, !!input.male);
+        const jumuah = cur === 'dhuhr' && isJumuah(today, male);
         seldom('rawatib', undefined, {
           title: `${type === 'sunnahBefore' ? 'قبلية' : 'بعدية'} ${jumuah ? 'الجمعة' : NAME[cur]} — ${arCount(n, 'ركعة', 'ركعتان', 'ركعات', 'ركعة')}`,
           action: { kind: 'sunnah', dateKey: today, prayer: cur, type },
+          since: T[cur],
         });
       }
     }
-    if (!dhikrToday('morning') && within(T.fajr, T.dhuhr)) seldom('morning', T.dhuhr);
-    if (!dhikrToday('evening') && within(T.asr, T.isha)) seldom('evening', T.isha);
+    // (morning/evening adhkar are their own items above — never competing for the one suggestion)
     if (!dhikrToday('sleep') && lateNight) seldom('sleep', undefined);
-    if (input.male && rates.mosque != null && prayOk) {
+    if (male && rates.mosque != null && prayOk) {
       const next = PRAYERS.find((p) => T[p].getTime() > at && T[p].getTime() - at <= 30 * MIN);
       if (next) seldom('mosque', T[next], { title: `صلِّ ${NAME[next]} في المسجد` });
     }
     if (within(T.dhuhr, T.maghrib)) seldom('sadaqah', undefined);
 
-    // The day's own sunnah: for everyone, ahead of the habits.
+    // The day's own sunnah: for everyone, ahead of the habits. Friday's night
+    // begins at Thursday's Maghrib — الكهف from then.
     const friday = now.getDay() === 5;
+    const fridayEve = now.getDay() === 4 && at >= T.maghrib.getTime();
     const kahfRead = (input.pagesToday ?? []).some((p) => p >= KAHF_PAGES[0] && p <= KAHF_PAGES[1]);
     const lastHour = new Date(T.maghrib.getTime() - 60 * MIN);
-    if (friday && within(lastHour, T.maghrib)) cands.push({ h: 'fridayHour', rank: -3, end: T.maghrib, item: { kicker: 'آخر ساعة من الجمعة' } });
-    if (friday && !kahfRead && within(T.sunrise, lastHour)) cands.push({ h: 'kahf', rank: -2, item: { kicker: 'يوم الجمعة' } });
-    const fast = at >= T.asr.getTime() ? fastTomorrow(now) : null;
-    if (fast) cands.push({ h: 'fasting', rank: -1, item: { kicker: 'انوِ من الليل', ...fast } });
+    if (friday && within(lastHour, T.maghrib)) cands.push({ h: 'fridayHour', rank: -3, end: T.maghrib, item: { kicker: 'آخر ساعة من الجمعة', why: 'لأنها آخر ساعة من يوم الجمعة' } });
+    if (friday && !kahfRead && within(T.sunrise, lastHour)) cands.push({ h: 'kahf', rank: -2, item: { kicker: 'يوم الجمعة', why: 'لأن اليوم جمعة' } });
+    if (fridayEve && !kahfRead) {
+      cands.push({
+        h: 'kahf',
+        rank: -2,
+        item: { kicker: 'ليلة الجمعة', why: 'لأن ليلة الجمعة دخلت بالمغرب', body: '«من قرأ سورة الكهف ليلة الجمعة أضاء له من النور فيما بينه وبين البيت العتيق»' },
+      });
+    }
 
     const pick = cands.filter((c) => !muted.has(c.h) && !hidden.has(`suggest.${c.h}`)).sort((a, b) => a.rank - b.rank)[0];
     if (pick) {
       const c = SUNNAH_COPY[pick.h];
-      out.push({ id: `suggest.${pick.h}`, level: 'suggest', icon: c.icon, kicker: 'سنّة تغيب عنك', title: c.title, body: c.body, to: c.to, deadline: pick.end, habit: pick.h, ...pick.item });
-    }
-  }
-
-  // ── her everyday chores, from the afternoon until logged ──
-  if (input.house && now.getHours() >= 14 && !muted.has('house')) {
-    const done = new Set(input.house.filter((e) => e.day === today).map((e) => e.chore));
-    const left = DAILY_CHORES.filter((c) => !done.has(c));
-    if (left.length) {
       out.push({
-        id: 'house.today',
+        id: `suggest.${pick.h}`,
         level: 'suggest',
-        icon: 'house',
-        kicker: 'مهام المنزل',
-        title: 'سجّلي ما أنجزتِه في بيتك اليوم',
-        body: '«كان النبي ﷺ يكون في مهنة أهله» — بنيّةٍ صالحة تصير عبادة، ولها نقاطها في الترتيب',
-        to: '/study?tab=house',
-        habit: 'house',
-        action: { kind: 'chores', chores: left },
+        weight: 'sunnah',
+        icon: c.icon,
+        kicker: 'سنّة تغيب عنك',
+        title: c.title,
+        body: c.body,
+        to: c.to,
+        deadline: pick.end,
+        habit: pick.h,
+        ...pick.item,
       });
     }
   }
 
-  const order: Record<AttentionLevel, number> = { missed: 0, closing: 1, suggest: 2 };
+  // ── a season ahead ──
+  const season = muted.has('seasons') ? null : seasonNotice(now, offset);
+  if (season) {
+    out.push({ id: season.id, level: 'prep', weight: 'sunnah', icon: 'season', kicker: 'استعدّ', title: season.title, body: season.body, to: season.to, habit: 'seasons', why: 'لتستقبله وقد استعددت' });
+  }
+
+  // ── the registered sources ──
+  const ctx: SourceContext = {
+    now,
+    today,
+    times: T,
+    timesOf: input.timesOf ?? ((d) => (dk(d) === today ? T : null)),
+    gender: input.gender ?? (input.male ? 'male' : null),
+    excused: !!excused[today],
+    hijri: toHijri(now, offset),
+    hijriOffset: offset,
+  };
+  out.push(...collectAttention(ctx).filter((i) => !i.habit || !muted.has(i.habit)));
+
+  return rankAttention(
+    out.filter((i) => !hidden.has(i.id)),
+    now,
+  );
+}
+
+// ── ranking ────────────────────────────────────────────────────────────────
+const WEIGHT: Record<AttentionWeight, number> = { fard: 100, sunnah: 50, extra: 30 };
+/** A suggestion is an invitation, tomorrow can wait: they sit below what is due today. */
+const SHELF: Record<AttentionLevel, number> = { missed: 45, closing: 0, suggest: -15, prep: -25 };
+
+/**
+ * importance (fard 100 · sunnah 50 · extra 30) + urgency (up to 60% of the
+ * importance as the deadline nears over its last three hours; a missed fard
+ * +45) + the user's own habit (up to 25) and streak at stake (up to 20) +
+ * freshness (up to 10 in the first two hours). So a fard about to end outranks
+ * logging missed ones (what can still be prayed on time comes first), and a
+ * missed fard outranks any sunnah running out.
+ */
+export function scoreOf(i: AttentionItem, now: Date): number {
+  if (i.score != null) return i.score;
+  const w = WEIGHT[i.weight ?? 'extra'];
+  const left = i.deadline ? (i.deadline.getTime() - now.getTime()) / MIN : null;
+  const urgency = left != null && left > 0 ? 0.6 * w * Math.max(0, 1 - left / 180) : 0;
+  const relevance = 25 * (i.rate ?? 0) + Math.min(20, 2 * (i.streak ?? 0));
+  const fresh = i.since ? 10 * Math.max(0, 1 - (now.getTime() - i.since.getTime()) / (120 * MIN)) : 0;
+  return Math.round(w + SHELF[i.level] + urgency + relevance + fresh);
+}
+
+/** «لأنك تصليها عادةً، وسلسلتك ٧ أيام، وبقي ٢٥ دقيقة». */
+export function whyLine(i: AttentionItem, now: Date): string | undefined {
+  const parts: string[] = [];
+  if (i.why) parts.push(i.why);
+  if ((i.streak ?? 0) >= 2) parts.push(`سلسلتك ${daysN(i.streak!)}`);
+  const left = i.deadline ? i.deadline.getTime() - now.getTime() : 0;
+  if (left > 0) parts.push(`بقي ${leftLabel(left)}`);
+  return parts.length ? parts.map((p, n) => (n === 0 ? p : `و${p}`)).join('، ') : undefined;
+}
+
+/** Score, explain and order (best first; a nearer deadline breaks ties). */
+export function rankAttention(items: AttentionItem[], now: Date): AttentionItem[] {
   const due = (i: AttentionItem) => i.deadline?.getTime() ?? Infinity;
-  return out.filter((i) => !hidden.has(i.id)).sort((a, b) => order[a.level] - order[b.level] || due(a) - due(b));
+  return items
+    .map((i) => ({ ...i, score: scoreOf(i, now), why: whyLine(i, now) }))
+    .sort((a, b) => b.score - a.score || due(a) - due(b));
+}
+
+export interface AttentionView {
+  /** «الآن»: the one thing to do first (never tomorrow's). */
+  focus?: AttentionItem;
+  /** «قبل أن يفوت»: the rest of today. */
+  today: AttentionItem[];
+  /** «استعدّ للغد». */
+  tomorrow: AttentionItem[];
+}
+
+export function presentAttention(ranked: AttentionItem[]): AttentionView {
+  const focus = ranked.find((i) => i.level !== 'prep');
+  const rest = ranked.filter((i) => i !== focus);
+  return { focus, today: rest.filter((i) => i.level !== 'prep'), tomorrow: rest.filter((i) => i.level === 'prep') };
 }

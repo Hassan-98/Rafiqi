@@ -13,6 +13,8 @@ interface Window {
       /** Download/extract progress; absent on shells built before 2026-10-12. */
       onProgress?(cb: (p: { phase: 'download' | 'extract'; loaded: number; total: number }) => void): () => void;
     };
+    /** Another site's page as text, HTTPS only (lesson links); absent on shells built before 2026-11-19. */
+    fetchText?(url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<string>;
   };
 }
 

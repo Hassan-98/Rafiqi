@@ -18,6 +18,14 @@ const mem = new Map<string, string>();
 
 import {
   addDays,
+  applyLessonRows,
+  isSingleLesson,
+  lessonList,
+  lessonProgress,
+  lessonsDone,
+  lessonsOnDay,
+  progressLogs,
+  reachLogs,
   atTime,
   completionLog,
   dayHeadingAr,
@@ -266,6 +274,51 @@ async function main() {
   check('widget keeps a fresh done one-off', !hiddenFromWidget({ ...base, done: true, doneAt: SAT - 23 * 3_600_000 }, SAT));
   check('widget drops a day-old done one-off', hiddenFromWidget({ ...base, done: true, doneAt: SAT - 25 * 3_600_000 }, SAT));
   check('widget keeps open + recurring', !hiddenFromWidget(base, SAT) && !hiddenFromWidget({ ...base, repeat: 'daily', done: true, doneAt: SAT - 9 * DAY }, SAT));
+
+  // «جدول المتابعة»: editing a series' lesson list keeps every watched mark on its lesson.
+  {
+    const series = circle({
+      format: 'series',
+      slots: [],
+      episodes: [{ title: 'أ' }, { title: 'ب', durationMin: 40 }, { title: 'ج' }],
+      totalLessons: 3,
+      log: [
+        { id: 'l2', n: 2, title: 'ب', date: SAT, status: 'watched' },
+        { id: 'l1', n: 1, title: 'أ', date: SAT - DAY, status: 'watched' },
+        { id: 'x', date: SAT - 2 * DAY, status: 'watched' },
+      ],
+    });
+    const rows = lessonList(series).map((e, i) => ({ ...e, orig: i + 1 }));
+    // Move «ج» to the top, rename «ب», drop «أ», add «د».
+    const out = applyLessonRows(series, [rows[2], { ...rows[1], title: 'ب٢' }, { title: 'د', orig: null }]);
+    check('edited list in order', out.episodes!.map((e) => e.title).join() === 'ج,ب٢,د');
+    check('total follows the list', out.totalLessons === 3);
+    const byId = Object.fromEntries(out.log.map((l) => [l.id, l]));
+    check('a watched lesson keeps its mark at its new number + title', byId.l2.n === 2 && byId.l2.title === 'ب٢');
+    check('a removed lesson keeps its record, unnumbered + detached', byId.l1.n === undefined && byId.l1.detached === true && byId.l1.status === 'watched');
+    check('unnumbered logs untouched', byId.x === series.log[2]);
+    check('a length is kept, blanks dropped', out.episodes![1].durationMin === 40 && !('durationMin' in out.episodes![0]));
+    // A series of known size without titles gets one unnamed row per lesson.
+    check('unnamed rows for a sized series', lessonList(circle({ format: 'series', totalLessons: 4 })).length === 4);
+  }
+
+  // «سجّل تقدّمك»: minutes inside a lesson, then finishing it; «وصلت إلى الدرس x» marks earlier ones (no points).
+  {
+    const c0 = circle({ format: 'series', slots: [], episodes: [{ title: 'أ', durationMin: 40 }, { title: 'ب', durationMin: 30 }, { title: 'ج', durationMin: 20 }] });
+    const stamp = (logs: Omit<LessonLog, 'id'>[], c: StudyCircle) => ({ ...c, log: [...logs.map((l, i) => ({ ...l, id: `g${c.log.length + i}` })), ...c.log] });
+    let c = stamp(progressLogs(c0, 1, 15, SAT, 40), c0);
+    check('a partial mark', c.log.length === 1 && c.log[0].partial === true && c.log[0].durationMin === 15);
+    check('partial is not a finished lesson', lessonsDone(c) === 0 && lessonProgress(c, 1).minutes === 15 && !lessonProgress(c, 1).done);
+    check('no mark when not further on', progressLogs(c, 1, 10, SAT, 40).length === 0);
+    c = stamp(progressLogs(c, 1, 40, SAT, 40), c);
+    check('finishing logs the rest of its length', c.log[0].durationMin === 25 && !c.log[0].partial && lessonProgress(c, 1).done && lessonsDone(c) === 1);
+    const reach = reachLogs(c, 3, SAT);
+    check('reach marks only the lessons before, not done ones', reach.length === 1 && reach[0].n === 2 && reach[0].backfill === true);
+    c = stamp(reach, c);
+    check('a reached lesson counts as done', lessonsDone(c) === 2 && lessonProgress(c, 2).done);
+    check('catch-up and partial marks are no lessons of the day', lessonsOnDay(c, dayKey(SAT)) === 1);
+    check('one recorded lesson is not a series', isSingleLesson(circle({ format: 'series', totalLessons: 1 })) && !isSingleLesson(c0));
+  }
 
   if (failures) {
     console.error(`\n${failures} check(s) failed`);

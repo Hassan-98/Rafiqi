@@ -10,7 +10,6 @@ import { PrayersModule } from '@/components/modules/PrayersModule';
 import { DhikrModule } from '@/components/modules/DhikrModule';
 import { QuranWirdModule } from '@/components/modules/QuranWirdModule';
 import { QiyamModule } from '@/components/modules/QiyamModule';
-import { FastingModule } from '@/components/modules/FastingModule';
 import { DuaaJournalModule } from '@/components/modules/DuaaJournalModule';
 import { CustomHabitsModule } from '@/components/modules/CustomHabitsModule';
 import { useProgressStore } from '@/store/progressStore';
@@ -70,7 +69,6 @@ function ModuleContent({ id }: { id: ModuleId }) {
     case 'dhikr': return <DhikrModule />;
     case 'quran': return <QuranWirdModule />;
     case 'qiyam': return <QiyamModule />;
-    case 'fasting': return <FastingModule />;
     case 'duaa': return <DuaaJournalModule />;
     case 'habits': return <CustomHabitsModule />;
     default: return null;
@@ -163,6 +161,9 @@ export function ModuleDetailPage() {
   if (!id || !validIds.includes(id as ModuleId)) {
     return <Navigate to="/" replace />;
   }
+
+  // The fast lives in «عباداتي» now (owner 2026-11-19); old links and armed notifications land there.
+  if (id === 'fasting') return <Navigate to="/targets?tab=fasting" replace />;
 
   const moduleId = id as ModuleId;
 

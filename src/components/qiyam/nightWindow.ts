@@ -51,7 +51,7 @@ export function nightPhase(w: NightWindow | null, now: number): NightPhase {
   return 'after';
 }
 
-/** True between Isha and Fajr — the «وِرد وقيام» tab opens on قيام then. */
+/** True between Isha and Fajr — the «عباداتي» tab opens on قيام then. */
 export function isQiyamTime(now = new Date()): boolean {
   const s = useSettingsStore.getState();
   const w = computeNightWindow(s.coords, s.prayerMethod, s.madhabSchool, qiyamNightKey(now));

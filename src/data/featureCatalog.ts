@@ -3,6 +3,7 @@ import {
   BookOpen, Download, MoonStar, Moon, Star,
   Hand, Compass, MapPin, CalendarDays, BookHeart, HandHeart, Sparkles, ScrollText,
   Coins, Gift, Award, Trophy, BarChart3, Settings, Cloud, Target, UserRound, GraduationCap, ListChecks, Library,
+  HeartHandshake, Users, TrendingUp, NotebookPen, History, BellOff,
 } from 'lucide-react';
 import { Mosque } from '@/components/icons/Mosque';
 
@@ -42,7 +43,9 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { id: 'prayers', label: 'الصلاة', to: '/module/prayers', Icon: Mosque },
       { id: 'dhikr', label: 'الأذكار', to: '/adhkar', Icon: Sparkles },
       { id: 'qiyam', label: 'قيام الليل', to: '/targets?tab=qiyam', Icon: MoonStar, hint: 'سجّل قيامك ليلة بليلة' },
-      { id: 'fasting', label: 'الصيام', to: '/module/fasting', Icon: Moon },
+      { id: 'fasting', label: 'الصيام', to: '/targets?tab=fasting', Icon: Moon },
+      { id: 'qada', label: 'قضاء ما فات', to: '/targets?tab=qada', Icon: History, hint: 'ما عليك من صلوات وصيام، وخطة لسداده' },
+      { id: 'prayer-mode', label: 'وضع الصلاة', to: '/prayer-mode', Icon: BellOff, hint: 'صمتُ الهاتف وقت الصلاة' },
       { id: 'habits', label: 'العادات', to: '/study?tab=habits', Icon: Star },
     ],
   },
@@ -60,8 +63,24 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
     id: 'study',
     title: 'العلم والمهام',
     items: [
-      { id: 'study', label: 'حلقات العلم', to: '/study?tab=circles', Icon: GraduationCap, hint: 'دروسك على تيليجرام ويوتيوب وغيرها' },
+      { id: 'study', label: 'حلقات العلم', to: '/targets?tab=circles', Icon: GraduationCap, hint: 'دروسك على تيليجرام ويوتيوب وغيرها' },
       { id: 'tasks', label: 'مهامي', to: '/study?tab=tasks', Icon: ListChecks, hint: 'قائمة مهام بتنبيهات' },
+    ],
+  },
+  {
+    id: 'growth',
+    title: 'التزكية والمحاسبة',
+    items: [
+      { id: 'programs', label: 'برامج التدرّج', to: '/programs', Icon: TrendingUp, hint: 'عبادةٌ تكبر معك يوماً بيوم' },
+      { id: 'friday-review', label: 'محاسبة الجمعة', to: '/targets?tab=friday', Icon: NotebookPen, hint: 'وقفة كل أسبوع مع نفسك' },
+    ],
+  },
+  {
+    id: 'people',
+    title: 'الأهل والصحبة',
+    items: [
+      { id: 'silat', label: 'صلة الرحم', to: '/study?tab=silat', Icon: HeartHandshake, hint: 'والداك وأرحامك ومن تحب' },
+      { id: 'groups', label: 'المجموعات', to: '/groups', Icon: Users, hint: 'ترتيب وختمة جماعية مع أهلك وصحبك' },
     ],
   },
   {

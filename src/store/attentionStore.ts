@@ -5,16 +5,20 @@ import { safeStorage } from './safeStorage';
 /**
  * «يحتاج انتباهك» on Home (services/dayAttention.ts): «ليس الآن» hides an item
  * for the day; «لا تقترحها» mutes a suggested sunnah on Home AND in the
- * notifications, until restored from Settings.
+ * notifications, until restored from Settings; «سأصومه» remembers tomorrow's
+ * fast so «رفيقك اليومي» wakes its suhoor.
  */
 interface AttentionState {
   /** item id → dateKey it was hidden on. */
   dismissed: Record<string, string>;
-  /** Muted habit keys (HabitKey). */
+  /** Muted habit keys (HabitKey, 'house', 'seasons', or a source's own). */
   muted: string[];
+  /** The day the user said they will fast. */
+  fastIntent: string | null;
   dismiss: (id: string, dayKey: string) => void;
   mute: (habit: string) => void;
   unmuteAll: () => void;
+  setFastIntent: (dayKey: string | null) => void;
 }
 
 export const useAttentionStore = create<AttentionState>()(
@@ -22,6 +26,7 @@ export const useAttentionStore = create<AttentionState>()(
     (set) => ({
       dismissed: {},
       muted: [],
+      fastIntent: null,
       // Only today's entries matter — older ones are dropped on the next write.
       dismiss: (id, dayKey) =>
         set((s) => ({
@@ -29,6 +34,7 @@ export const useAttentionStore = create<AttentionState>()(
         })),
       mute: (habit) => set((s) => (s.muted.includes(habit) ? s : { muted: [...s.muted, habit] })),
       unmuteAll: () => set({ muted: [] }),
+      setFastIntent: (fastIntent) => set({ fastIntent }),
     }),
     { name: 'myzikr:attention', storage: safeStorage },
   ),

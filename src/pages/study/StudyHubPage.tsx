@@ -1,131 +1,24 @@
 import { CustomHabitsModule } from '@/components/modules/CustomHabitsModule';
 import { SectionInsights } from '@/components/stats/SectionInsights';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { CalendarCheck, ExternalLink, Flame, GraduationCap, Plus, Radio } from 'lucide-react';
+import { CalendarCheck } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { ArchMotif, SectionTitle } from '@/components/ui/Ornament';
-import { ProgressRing } from '@/components/ui/ProgressRing';
+import { SectionTitle } from '@/components/ui/Ornament';
 import { useStudyStore } from '@/store/studyStore';
 import { useTasksStore } from '@/store/tasksStore';
-import {
-  addDays, completionOn, dayKey, expectedSessions, inAr, nextStudyOverall, platformPhrase, studyStreak,
-  taskCounts, WEEKDAY_AR,
-} from '@/store/studyModel';
+import { addDays, completionOn, dayKey, expectedSessions, WEEKDAY_AR } from '@/store/studyModel';
 import { rescheduleAllStudy } from '@/services/studyReminders';
 import { toArabicDigits } from '@/utils/arabicFormat';
-import { PlatformGlyph, Segmented, openLink, useNow } from '@/components/study/studyUi';
-import { CirclesView, useQuickLog, whenAr } from '@/components/study/CirclesView';
+import { Segmented, useNow } from '@/components/study/studyUi';
+import { CirclesHome } from '@/components/study/CirclesView';
 import { TasksView } from '@/components/study/TasksView';
 import { HouseView } from '@/components/study/HouseView';
-import type { StudyCircle } from '@/store/studyModel';
+import { SilatPage } from '@/pages/SilatPage';
 
-type Tab = 'tasks' | 'house' | 'habits' | 'circles';
-const TABS: Tab[] = ['tasks', 'house', 'habits', 'circles'];
+type Tab = 'tasks' | 'silat' | 'house' | 'habits';
+const TABS: Tab[] = ['tasks', 'silat', 'house', 'habits'];
 const SHORT_DAY = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
-
-function LiveLogButton({ c }: { c: StudyCircle }) {
-  const { loggedToday, label, log } = useQuickLog(c);
-  return (
-    <Button variant="secondary" size="sm" onClick={log} disabled={loggedToday}>
-      {loggedToday ? 'سُجّل حضورك' : label}
-    </Button>
-  );
-}
-
-/** Today in one card: the next lesson (with its link), today's task ring and the study streak. */
-function StudyHero({ now, onAdd }: { now: number; onAdd: () => void }) {
-  const circles = useStudyStore((s) => s.circles);
-  const tasks = useTasksStore((s) => s.tasks);
-  const next = nextStudyOverall(circles, now);
-  const { done, total } = taskCounts(tasks, now);
-  const streak = studyStreak(circles, now);
-  const pct = total ? (done / total) * 100 : 0;
-
-  return (
-    <Card variant="hero" className="p-5">
-      <ArchMotif className="absolute -top-6 -start-8 w-40 opacity-15" />
-      <div className="relative">
-        {next ? (
-          <>
-            <p className="text-xs text-on-accent/75 flex items-center gap-1.5">
-              {next.session.live ? (
-                <>
-                  <Radio size={13} className="motion-safe:animate-pulse" /> يُبث الآن
-                </>
-              ) : (
-                'الدرس القادم'
-              )}
-            </p>
-            <h2 className="mt-1 text-xl font-display font-bold leading-snug text-balance">{next.circle.title}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-on-accent/85">
-              <span className="inline-flex items-center gap-1 rounded-full bg-on-accent/12 ps-1.5 pe-2 py-0.5 text-xs font-semibold">
-                <PlatformGlyph platform={next.circle.platform} size={13} />
-                {platformPhrase(next.circle.platform) || 'موعد'}
-              </span>
-              <span className="font-counter tabular-nums">{whenAr(next.session.at, now)}</span>
-              {!next.session.live ? <span className="text-on-accent/70">· {inAr(next.session.at - now)}</span> : null}
-            </div>
-            <div className="mt-4 flex gap-2">
-              {next.circle.link ? (
-                <Button variant="gold" size="sm" leftIcon={<ExternalLink size={15} />} onClick={() => void openLink(next.circle.link)}>
-                  افتح الرابط
-                </Button>
-              ) : null}
-              {next.session.live ? <LiveLogButton c={next.circle} /> : null}
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-xs text-on-accent/75">طلب العلم عبادة</p>
-            <h2 className="mt-1 text-xl font-display font-bold text-balance">
-              {circles.length ? 'لا مواعيد قادمة' : 'نظّم دروسك ومهامك'}
-            </h2>
-            <p className="mt-1 text-[13px] text-on-accent/80 text-pretty">
-              {circles.length ? 'أضف موعداً لحلقاتك ليصلك التذكير قبلها.' : 'حلقات تيليجرام ويوتيوب والمسجد، ومهامك اليومية بتذكيراتها.'}
-            </p>
-            <Button variant="gold" size="sm" className="mt-4" leftIcon={<Plus size={15} />} onClick={onAdd}>
-              أضف حلقة
-            </Button>
-          </>
-        )}
-      </div>
-
-      <div className="relative mt-5 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-on-accent/10 px-2 py-3 flex flex-col items-center">
-          <div className="relative">
-            <ProgressRing
-              value={pct}
-              size={40}
-              strokeWidth={4}
-              showPercent={false}
-              colorFrom="var(--color-on-accent)"
-              colorTo="var(--color-gold-light)"
-              trackColor="color-mix(in srgb, var(--color-on-accent) 18%, transparent)"
-            />
-            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-counter font-bold tabular-nums">
-              {toArabicDigits(done)}/{toArabicDigits(total)}
-            </span>
-          </div>
-          <p className="mt-1 text-[10px] text-on-accent/75 leading-tight">مهامي</p>
-        </div>
-        <div className="rounded-2xl bg-on-accent/10 px-2 py-3 text-center">
-          <Flame size={15} className="mx-auto text-gold-light" />
-          <p className="mt-1 text-xl font-counter font-bold tabular-nums">{toArabicDigits(streak)}</p>
-          <p className="text-[10px] text-on-accent/75 leading-tight">يوماً في طلب العلم</p>
-        </div>
-        <div className="rounded-2xl bg-on-accent/10 px-2 py-3 text-center">
-          <GraduationCap size={15} className="mx-auto text-gold-light" />
-          <p className="mt-1 text-xl font-counter font-bold tabular-nums">
-            {toArabicDigits(circles.filter((c) => c.status === 'active').length)}
-          </p>
-          <p className="text-[10px] text-on-accent/75 leading-tight">حلقة نشطة</p>
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 /** Self-contained progress panel: this week's task completion, attendance, lessons this month. */
 function StudyStatsPanel({ now }: { now: number }) {
@@ -206,8 +99,9 @@ function StudyStatsPanel({ now }: { now: number }) {
 /**
  * «المهام والعادات» (bottom tab) — the daily to-do, the habits tracker and the
  * knowledge circles (live lessons, recorded series, channels), each with its
- * own reminders, and «مهام المنزل» (scored on the board). Tabs via
- * ?tab=tasks|house|habits|circles (default tasks);
+ * own reminders, «صلة الرحم» (the /silat page body; its own segment on
+ * ?view=) and «مهام المنزل» (scored on the board). Tabs via
+ * ?tab=tasks|silat|house|habits|circles (default tasks);
  * ?task=ID opens that task (notification / widget deep link); /habits
  * redirects here with tab=habits.
  */
@@ -217,6 +111,11 @@ export function StudyHubPage() {
   const rawTab = params.get('tab');
   const tab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : 'tasks';
   const now = useNow();
+
+  // حلقات العلم moved to «عباداتي» (owner 2026-11-18).
+  useEffect(() => {
+    if (rawTab === 'circles') navigate('/targets?tab=circles', { replace: true });
+  }, [rawTab, navigate]);
 
   // Legacy/alt deep link: /study?circle=ID → the circle page.
   const circleParam = params.get('circle');
@@ -231,7 +130,6 @@ export function StudyHubPage() {
 
   const setTab = (t: Tab) => setParams(t === 'tasks' ? {} : { tab: t }, { replace: true });
   const today = new Date(now);
-  const [addReq, setAddReq] = useState(0);
 
   return (
     <div className="flex flex-col gap-6 px-4 pb-nav" style={{ paddingTop: 'calc(var(--safe-top) + 1rem)' }}>
@@ -240,48 +138,43 @@ export function StudyHubPage() {
           <CalendarCheck size={14} className="text-gold" />
           {WEEKDAY_AR[today.getDay()]} {toArabicDigits(today.getDate())}/{toArabicDigits(today.getMonth() + 1)}
         </p>
-        <h1 className="mt-0.5 text-[26px] font-display font-bold leading-tight text-text-primary dark:text-text-on-dark">المهام والعادات</h1>
-        <p className="mt-1 text-sm text-text-secondary dark:text-text-on-dark/70 text-pretty">مهام يومك وبيتك، وعاداتك، وحلقات العلم</p>
+        <h1 className="mt-0.5 text-[26px] font-display font-bold leading-tight text-text-primary dark:text-text-on-dark">حياتي</h1>
+        <p className="mt-1 text-sm text-text-secondary dark:text-text-on-dark/70 text-pretty">مهام يومك وبيتك، وصلة رحمك، وعاداتك</p>
       </header>
 
       <Segmented
+        scroll
         value={tab}
         onChange={setTab}
         options={[
           { value: 'tasks', label: 'المهام' },
-          { value: 'house', label: 'مهام المنزل' },
+          { value: 'silat', label: 'صلة الرحم' },
+          { value: 'house', label: 'المنزل' },
           { value: 'habits', label: 'العادات' },
-          { value: 'circles', label: 'حلقات العلم' },
         ]}
       />
 
-      {/* The circles hero lives on «حلقات العلم» only (owner request). */}
-      {tab === 'circles' ? (
-        <StudyHero
-          now={now}
-          onAdd={() => {
-            setTab('circles');
-            setAddReq((n) => n + 1);
-          }}
-        />
-      ) : null}
-
       {tab === 'tasks' ? (
         <TasksView focusTaskId={params.get('task')} />
+      ) : tab === 'silat' ? (
+        <SilatPage embedded />
       ) : tab === 'house' ? (
         <HouseView />
-      ) : tab === 'habits' ? (
+      ) : (
         <>
           <CustomHabitsModule />
           <SectionInsights domain="habits" statsTo="/stats/habits" />
         </>
-      ) : (
-        <CirclesView addRequest={addReq} />
       )}
 
-      {tab === 'tasks' || tab === 'circles' ? <StudyStatsPanel now={now} /> : null}
+      {tab === 'tasks' ? <StudyStatsPanel now={now} /> : null}
     </div>
   );
 }
 
 export default StudyHubPage;
+
+/** «حلقات العلم» — its own tab in «عباداتي» (/targets?tab=circles) since 2026-11-18 (owner); the screen is CirclesHome. */
+export function CirclesTab() {
+  return <CirclesHome />;
+}

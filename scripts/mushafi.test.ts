@@ -1,6 +1,19 @@
 // Run: npx esbuild scripts/mushafi.test.ts --bundle --format=esm --platform=node --alias:@=./src --outfile=.tmp-test/mushafi.mjs && node .tmp-test/mushafi.mjs
 import assert from 'node:assert/strict';
-import { khatmaState, normalizeMushafiCode, noteTops, prettyMushafiCode, quranTypeStats, typesActiveOn, type MushafiKhatma } from '@/store/mushafiStore';
+import {
+  ayahKey,
+  khatmaState,
+  normalizeMushafiCode,
+  noteTops,
+  prettyMushafiCode,
+  quranTypeStats,
+  sessionCredit,
+  sessionStats,
+  typesActiveOn,
+  type MushafiKhatma,
+  type MushafiSession,
+} from '@/store/mushafiStore';
+import { PAGE_FIRST_AYAH } from '@/data/quranPages';
 
 const k = (o: Partial<MushafiKhatma> = {}): MushafiKhatma => ({ id: 'k1', m: 'r1', n: 'ختمة', at: 1, s: '2026-11-01', d: 30, b: 0, t: 1, ...o });
 const ribbon = (p: number, extra = {}) => [{ id: 'r1', p, name: 'ختمة رمضان', color: '#aa0000', t: 1, ...extra }];
@@ -132,6 +145,62 @@ assert.equal(s.end, 24);
   let t4 = noteTops({}, short, ribbon(1), '2026-11-01');
   t4 = noteTops(t4, short, ribbon(101), '2026-11-02');
   assert.equal(quranTypeStats({}, short, ribbon(101), '2026-11-02', t4).tilawa.days['2026-11-02'], 100);
+}
+
+// Sessions (مصحفي «جلسة»): pages by ayat, first memorization vs review, memorized pages and ajzaa, الكهف on Friday.
+{
+  const at = (d: string, h: number) => new Date(`${d}T${String(h).padStart(2, '0')}:00:00`).getTime();
+  const ses = (o: Partial<MushafiSession>): MushafiSession => ({ id: 'x', ty: 'tilawa', a: 0, z: 6, s: at('2026-11-14', 9), e: at('2026-11-14', 10), t: 1, ...o });
+  const total = (m: Map<number, number>) => Math.round([...m.values()].reduce((n, f) => n + f, 0) * 1000) / 1000;
+  assert.deepEqual(ayahKey(0), [1, 1]);
+  assert.deepEqual(ayahKey(2140), [18, 1]);
+  assert.deepEqual(ayahKey(6235), [114, 6]);
+
+  // الفاتحة = page 1, whole; reading memorizes nothing.
+  let st = sessionStats([ses({})]);
+  assert.deepEqual([...st.items[0].pages], [[1, 1]]);
+  assert.equal(st.items[0].minutes, 60);
+  assert.equal(st.items[0].day, '2026-11-14');
+  assert.equal(st.memorized, 0);
+  // Part of a page isn't the page.
+  st = sessionStats([ses({ ty: 'hifz', a: 0, z: 5 })]);
+  assert.equal(total(st.items[0].pages), Math.round((6 / 7) * 1000) / 1000);
+  assert.equal(st.memorized, 0);
+
+  // جزء عمّ (pages 582–604) memorized, then again the next day: new only the first time.
+  const amma = PAGE_FIRST_AYAH[581];
+  st = sessionStats([
+    ses({ id: 'h2', ty: 'hifz', a: amma, z: 6235, s: at('2026-11-15', 9), e: at('2026-11-15', 10) }),
+    ses({ id: 'h1', ty: 'hifz', a: amma, z: 6235 }),
+  ]);
+  assert.deepEqual(st.items.map((x) => x.id), ['h1', 'h2'], 'oldest first');
+  assert.equal(st.memorized, 23);
+  assert.equal(st.juz, 1);
+  assert.equal(total(st.items[0].fresh), 23);
+  assert.equal(st.items[1].fresh.size, 0);
+  const again = sessionCredit(st.items[1]);
+  assert.equal(Math.round(again.review), 23);
+  assert.equal(again.hifz, 0);
+  assert.equal(st.pageTouched[603], at('2026-11-15', 10), 'last touched = the latest session');
+  // Reviewing what was memorized long ago records it; a deleted session doesn't count.
+  st = sessionStats([ses({ ty: 'review' }), ses({ id: 'd', ty: 'hifz', a: 7, z: 11, del: 1 })]);
+  assert.equal(st.memorized, 1);
+  assert.equal(st.items.length, 1);
+
+  // الكهف on a Friday (2026-11-13) in two sittings, reading then listening; a Saturday doesn't count.
+  st = sessionStats([
+    ses({ id: 'k1', a: 2140, z: 2200, s: at('2026-11-13', 8), e: at('2026-11-13', 9) }),
+    ses({ id: 'k2', ty: 'listen', a: 2201, z: 2249, s: at('2026-11-13', 20), e: at('2026-11-13', 21) }),
+  ]);
+  assert.deepEqual([...st.kahfFridays], ['2026-11-13']);
+  assert.equal(sessionStats([ses({ a: 2140, z: 2249 })]).kahfFridays.size, 0, 'Saturday');
+  assert.equal(sessionStats([ses({ a: 2141, z: 2249, s: at('2026-11-13', 8) })]).kahfFridays.size, 0, 'not all of it');
+
+  // A page a khatma already credited that day counts once; listening isn't reading.
+  const qt = quranTypeStats({ '2026-11-14': [1] }, [k({ id: 'a', m: '', at: 3, s: '2026-11-01' })], [], '2026-11-14');
+  assert.equal(sessionCredit(sessionStats([ses({})]).items[0], qt).tilawa, 0);
+  assert.equal(sessionCredit(sessionStats([ses({ ty: 'listen' })]).items[0], qt).listen, 1);
+  assert.equal(sessionCredit(sessionStats([ses({})]).items[0]).tilawa, 1, 'no khatma: all of it');
 }
 
 // Codes.

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  Baby, Bath, BookOpenCheck, BrushCleaning, Car, CookingPot, House, Shirt, ShoppingBasket, Trash2, UtensilsCrossed,
-  WashingMachine, Wrench, type LucideIcon,
+  Baby, Backpack, Bath, BookOpenCheck, Brush, BrushCleaning, Bus, CakeSlice,
+  Coffee, CookingPot, Drill, Droplets, Fence, FileText, HandHeart, HeartPulse, House,
+  Layers, MapPin, Moon, Package, Puzzle, Refrigerator, Scissors, Shirt, ShoppingBasket, ShowerHead, Sofa,
+  Soup, Trash2, UtensilsCrossed, WashingMachine, Wind, Wrench, type LucideIcon,
 } from 'lucide-react';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Card } from '@/components/ui/Card';
@@ -10,7 +12,8 @@ import { useHouseStore } from '@/store/houseStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { clockAr, dayKey } from '@/store/studyModel';
 import {
-  MEALS, MEAL_LABEL, chorePoints, choresFor, entryLabel, pointsRange, type Chore, type HouseMeal,
+  GROUP_LABEL, MEALS, MEAL_LABEL, chorePoints, choresFor, entryLabel, pointsRange, type Chore, type ChoreGroup,
+  type HouseMeal,
 } from '@/data/houseChores';
 import { toArabicDigits as ar } from '@/utils/arabicFormat';
 import { toast } from '@/store/toastStore';
@@ -18,18 +21,46 @@ import { Field, Pill, useNow } from './studyUi';
 
 const ICON: Record<string, LucideIcon> = {
   cook: CookingPot,
+  sweets: CakeSlice,
   dishes: UtensilsCrossed,
+  kitchen: Refrigerator,
   laundry: WashingMachine,
-  fold: Shirt,
+  hang: Wind,
+  fold: Layers,
   iron: Shirt,
-  clean: BrushCleaning,
-  scrub: Bath,
-  kids: Baby,
+  sew: Scissors,
+  tidy: Sofa,
+  sweep: Brush,
+  mop: Droplets,
+  bathroom: ShowerHead,
+  deep: BrushCleaning,
+  baby: Baby,
+  feed: Soup,
+  kidsBath: Bath,
+  kidsSleep: Moon,
+  schoolPrep: Backpack,
   homework: BookOpenCheck,
+  kidsTime: Puzzle,
+  nursing: HeartPulse,
   shopping: ShoppingBasket,
+  schoolRun: Bus,
+  errands: MapPin,
+  papers: FileText,
   repair: Wrench,
-  errands: Car,
+  install: Drill,
+  heavy: Package,
+  outdoor: Fence,
+  helpHome: HandHeart,
+  trash: Trash2,
+  guests: Coffee,
 };
+
+/** The user's chores under their headings, in `choresFor`'s order (her side's groups first). */
+function grouped(chores: Chore[]): [ChoreGroup, Chore[]][] {
+  const by = new Map<ChoreGroup, Chore[]>();
+  for (const c of chores) by.set(c.group, [...(by.get(c.group) ?? []), c]);
+  return [...by];
+}
 
 /** The meal by the clock: before 11 the breakfast, before 5 pm the lunch. */
 const mealNow = (): HouseMeal => {
@@ -53,6 +84,7 @@ export function KindSheet({ chore, onClose, onPick }: { chore: Chore | null; onC
     <BottomSheet open={!!chore} onClose={onClose} title={chore?.label ?? ''}>
       {chore ? (
         <div className="flex flex-col gap-4">
+          {chore.hint ? <p className="text-[12.5px] text-text-muted text-pretty">{chore.hint}</p> : null}
           {chore.meals ? (
             <Field label="الوجبة">
               <div className="flex gap-2">
@@ -93,6 +125,7 @@ export function KindSheet({ chore, onClose, onPick }: { chore: Chore | null; onC
  */
 export function HouseView() {
   const gender = useSettingsStore((s) => s.gender);
+  const female = gender === 'female';
   const entries = useHouseStore((s) => s.entries);
   const remove = useHouseStore((s) => s.remove);
   const now = useNow();
@@ -120,26 +153,38 @@ export function HouseView() {
       </Card>
 
       <section className="flex flex-col gap-2.5">
-        <SectionTitle title="سجّل ما أنجزته" subtitle="لكل مهمة نقاطها في الترتيب بحسب جهدها" />
-        <div className="grid grid-cols-3 gap-2">
-          {choresFor(gender).map((c) => {
-            const Icon = ICON[c.id] ?? House;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => (c.kinds ? setPick(c) : logChore(c.id))}
-                className="flex flex-col items-center gap-1.5 rounded-[var(--radius-inner)] bg-white dark:bg-dark-card ring-1 ring-black/[0.05] dark:ring-white/[0.07] px-1.5 py-3 text-center hover:bg-teal/5 active:scale-[0.98] transition-[background-color,transform]"
-              >
-                <span className="w-10 h-10 rounded-xl bg-teal/10 text-teal dark:bg-teal/15 dark:text-teal-light inline-flex items-center justify-center">
-                  <Icon size={19} strokeWidth={1.9} aria-hidden />
-                </span>
-                <span className="text-[12px] font-semibold leading-snug text-text-primary dark:text-text-on-dark text-balance">{c.label}</span>
-                <span className="mt-auto font-counter tabular-nums text-[11px] font-bold text-gold-dark dark:text-gold-light">+{ar(pointsRange(c))}</span>
-              </button>
-            );
-          })}
-        </div>
+        <SectionTitle
+          title="سجّل ما أنجزته"
+          subtitle={female ? 'اختاري المهمة ثم قدرها — لكلٍّ نقاطها في الترتيب' : 'اختر المهمة ثم قدرها — لكلٍّ نقاطها في الترتيب'}
+        />
+        {grouped(choresFor(gender)).map(([group, chores]) => (
+          <div key={group} role="group" aria-labelledby={`house-${group}`} className="flex flex-col gap-1.5">
+            <h3 id={`house-${group}`} className="px-1 pt-1 text-xs font-semibold text-text-secondary dark:text-text-on-dark/75">
+              {GROUP_LABEL[group]}
+            </h3>
+            <div className="grid grid-cols-3 gap-2">
+              {chores.map((c) => {
+                const Icon = ICON[c.id] ?? House;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setPick(c)}
+                    className="flex flex-col items-center gap-1.5 rounded-[var(--radius-inner)] bg-white dark:bg-dark-card ring-1 ring-black/[0.05] dark:ring-white/[0.07] px-1.5 py-3 text-center hover:bg-teal/5 active:scale-[0.98] transition-[background-color,transform]"
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-teal/10 text-teal dark:bg-teal/15 dark:text-teal-light inline-flex items-center justify-center">
+                      <Icon size={19} strokeWidth={1.9} aria-hidden />
+                    </span>
+                    <span className="text-[12px] font-semibold leading-snug text-text-primary dark:text-text-on-dark text-balance">
+                      {c.label}
+                    </span>
+                    <span className="mt-auto font-counter tabular-nums text-[11px] font-bold text-gold-dark dark:text-gold-light">+{ar(pointsRange(c))}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="flex flex-col gap-2.5">
@@ -167,7 +212,9 @@ export function HouseView() {
             </ul>
           </Card>
         ) : (
-          <p className="text-[12.5px] text-text-muted text-pretty">لم تسجّل شيئاً اليوم بعد — اضغط المهمة حين تُنجزها.</p>
+          <p className="text-[12.5px] text-text-muted text-pretty">
+            {female ? 'لم تسجّلي شيئاً اليوم بعد — اضغطي المهمة حين تُنجزينها.' : 'لم تسجّل شيئاً اليوم بعد — اضغط المهمة حين تُنجزها.'}
+          </p>
         )}
       </section>
 

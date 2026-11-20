@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import {
   AlarmClock, BellOff, BellRing, BookOpen, CalendarDays, CalendarCheck, Check, ChevronDown, ChevronLeft, Flame, GraduationCap, HandHeart, Minus,
   Moon, MoonStar, Plus, Smartphone, Sparkles, Star, Sun, Sunrise, Sunset, SunDim, SunMedium, Target, Trash2, Volume2, X,
-  BookOpenText, Hourglass, Trophy, Wand2,
+  BookOpenText, Hourglass, Trophy, Crown, Wand2, Coffee, BedDouble,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Mosque } from '@/components/icons/Mosque';
@@ -42,7 +42,8 @@ import { InspirationSettings } from '@/components/inspiration/InspirationSetting
 import { useNotificationHealth, type HealthCheck } from './useNotificationHealth';
 import { UpcomingTimeline, usePendingNotifications } from './UpcomingTimeline';
 import { useAttentionStore } from '@/store/attentionStore';
-import { SUNNAH_COPY, type HabitKey } from '@/services/dayAttention';
+import { muteLabel } from '@/services/dayAttention';
+import { CompanionEase } from './CompanionEase';
 
 /**
  * «الإشعارات» — the whole notification experience in one place:
@@ -373,7 +374,7 @@ function LinkRow({ Icon, title, hint, to }: { Icon: LucideIcon; title: string; h
   );
 }
 
-type SmartToggle = 'streak' | 'weekly' | 'celebrate' | 'prayerCheck' | 'adhkarNudges' | 'wirdNudges' | 'challenges' | 'lateCalls' | 'suggestions';
+type SmartToggle = 'streak' | 'weekly' | 'celebrate' | 'prayerCheck' | 'adhkarNudges' | 'wirdNudges' | 'challenges' | 'lateCalls' | 'suggestions' | 'brief' | 'wrapup' | 'race';
 
 /** «رفيقك اليومي» is on and has prayer times to work with — the fixed reminder of this row steps aside. */
 function useCompanionCovers(k: 'adhkarNudges' | 'wirdNudges'): boolean {
@@ -434,7 +435,7 @@ function MutedSuggestions() {
     <div className="flex items-center gap-3 px-3 py-2.5">
       <p className="min-w-0 flex-1 ps-12 text-[11px] text-text-muted text-pretty">
         أخفيتَ {muted.length === 1 ? 'اقتراحاً واحداً' : muted.length === 2 ? 'اقتراحين' : `${toArabicDigits(muted.length)} اقتراحات`}:{' '}
-        {muted.map((h) => SUNNAH_COPY[h as HabitKey]?.title ?? (h === 'house' ? 'تذكير مهام المنزل' : h)).join('، ')}
+        {muted.map(muteLabel).join('، ')}
       </p>
       <button type="button" onClick={unmuteAll} className="shrink-0 min-h-9 px-2 text-xs font-semibold text-teal dark:text-teal-light">
         إعادتها
@@ -859,7 +860,20 @@ export function NotificationCenter() {
             body="مرة في اليوم على الأكثر: سنة قلّما تفعلها (الضحى، المسجد، أذكار النوم، الصدقة) في وقتها، وسورة الكهف وساعة الإجابة يوم الجمعة"
             Icon={Sparkles}
           />
+          <SmartRow
+            k="brief"
+            title="موجز الصباح"
+            body="بعد الفجر أو حين تبدأ يومك عادةً: صيام اليوم ومناسبته ودروسك ومهامك ووردك، في إشعار واحد"
+            Icon={Coffee}
+          />
+          <SmartRow
+            k="wrapup"
+            title="ختام اليوم"
+            body="قبل موعد نومك المعتاد: ما بقي ممكناً من يومك (الوتر والأذكار ووردك) والسلسلة التي على المحكّ"
+            Icon={BedDouble}
+          />
           <MutedSuggestions />
+          <CompanionEase />
           <SmartUpcoming />
         </Group>
       </Section>
@@ -867,7 +881,13 @@ export function NotificationCenter() {
       <Section title="الإشعارات الذكية" subtitle="تُبنى من إحصاءاتك، وتصمت حين تُنجز">
         <Group>
           <SmartRow k="streak" title="حماية السلسلة" body="تنبيه مسائي واحد إن لم تُتمّ سلسلة اليوم، ويُلغى فور تسجيلها" Icon={Flame} />
-          <SmartRow k="weekly" title="حصاد الأسبوع" body="ملخص كل جمعة بعد العصر بأرقامك الحقيقية" Icon={CalendarCheck} />
+          <SmartRow k="weekly" title="حصاد الأسبوع" body="كل جمعة بعد العصر: أسبوعك بأرقامه الحقيقية، وصفحة حصاده كاملة" Icon={CalendarCheck} />
+          <SmartRow
+            k="race"
+            title="لحظات الترتيب"
+            body="مرة في اليوم على الأكثر: إن اقتربت من تجاوز أمسك، أو كان تاج اليوم أو الأسبوع أو الشهر على المحكّ، وصباح كل سبت"
+            Icon={Crown}
+          />
           <SmartRow k="celebrate" title="الاحتفاء بالإنجاز" body="تهنئة واحدة عند رقم قياسي جديد، لا تتكرر" Icon={Sparkles} />
           <div className="px-3 py-3">
             <div className="flex items-center gap-3">

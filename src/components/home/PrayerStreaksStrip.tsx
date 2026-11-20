@@ -28,7 +28,7 @@ const NAWAFIL: { metric: BadgeMetric; label: string; unit: StreakChain['unit'] }
 ];
 
 /**
- * «سلاسل الصلوات» on Home, right under the prayer hero — each its own chain
+ * «سلاسل الصلوات» on the prayers page, under «صلوات اليوم» (owner 2026-11-20: off Home) — each its own chain
  * (owner, 2026-11-15): the five fard, each sunnah of the rawatib (one missed
  * sunnah breaks only its own), and the nawafil — الضحى، القيام، الوتر — plus
  * the closest streak badge across them.

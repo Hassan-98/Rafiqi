@@ -89,6 +89,12 @@ export interface SmartNotificationPrefs {
   lateCalls: boolean;
   /** Once a day, a sunnah the user seldom does (الضحى، المسجد…) or Friday's own, at its hour. */
   suggestions: boolean;
+  /** «موجز الصباح»: after Fajr / the learned wake time, today's agenda in one line (active users). */
+  brief: boolean;
+  /** «ختام اليوم»: before the learned bedtime, what is still possible today and the streaks at stake. */
+  wrapup: boolean;
+  /** «لحظات الترتيب» (services/raceMoments.ts): the self-race evening, a crown at stake, a new week. */
+  race: boolean;
   quietEnabled: boolean;
   quietStart: string; // HH:mm
   quietEnd: string; // HH:mm
@@ -105,6 +111,9 @@ export const SMART_DEFAULTS: SmartNotificationPrefs = {
   challenges: true,
   lateCalls: true,
   suggestions: true,
+  brief: true,
+  wrapup: true,
+  race: true,
   quietEnabled: true,
   quietStart: '23:00',
   quietEnd: '06:00',

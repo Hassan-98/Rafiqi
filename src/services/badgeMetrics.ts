@@ -25,9 +25,22 @@ import {
   type PrayerDayLog,
 } from '@/store/prayerLogStore';
 import { toArabicDigits } from '@/services/statsService';
-import { quranTypeStats, typesActiveOn, type MushafiKhatma, type MushafiMark, type RibbonTops } from '@/store/mushafiStore';
+import {
+  quranTypeStats,
+  sessionCredit,
+  sessionStats,
+  typesActiveOn,
+  type MushafiKhatma,
+  type MushafiMark,
+  type MushafiSession,
+  type RibbonTops,
+} from '@/store/mushafiStore';
 import { QURAN_TYPE_IDS, QURAN_TYPES, type QuranType } from '@/data/quranTypes';
 import { fromHijri, hijriMonthLength, toHijri, type HijriDate } from '@/services/HijriService';
+import { silatBadgeMetrics } from '@/store/silatModel';
+import { evaluateRun, programBadgeFacts } from '@/store/programsModel';
+import { dueDateOf, fastPaidDays, prayerTotals } from '@/services/qadaPlan';
+import { reviewStreak } from '@/services/fridayReview';
 import {
   BADGES,
   BADGE_CATEGORIES,
@@ -66,8 +79,8 @@ export interface BadgeSnapshot {
   readingDays: Record<string, number>;
   /** Finished khatmas: the old reader's + مصحفي's (listening ones have their own track). */
   khatmasFinished: number;
-  /** «مصحفي»: pages per day, khatmas (with their types) and ribbons — see mushafiStore. */
-  mushafi: { days: Record<string, number[]>; khatmas: MushafiKhatma[]; marks: MushafiMark[]; tops?: RibbonTops };
+  /** «مصحفي»: pages per day, khatmas (with their types), ribbons and sessions — see mushafiStore. */
+  mushafi: { days: Record<string, number[]>; khatmas: MushafiKhatma[]; marks: MushafiMark[]; tops?: RibbonTops; sessions?: MushafiSession[] };
   /** Days the whole Quran wird (every running khatma's portion) was done. */
   quranWirdDays: string[];
   hifzSessions: { mode: string; accuracy: number; correct: number }[];
@@ -85,10 +98,20 @@ export interface BadgeSnapshot {
     platform?: string;
     durationMin?: number;
     slots?: { weekday: number; durationMin?: number }[];
-    log: { date: number; status: string; durationMin?: number }[];
+    log: { date: number; status: string; durationMin?: number; backfill?: boolean }[];
   }[];
   /** «مهام المنزل» (houseStore) — scored on the board only. */
   house?: { chore: string; kind?: string; day: string }[];
+  /** «صلة الرحم وبرّ الوالدين» (silatStore). */
+  silat?: { people: import('@/store/silatModel').Person[]; entries: import('@/store/silatModel').SilatEntry[] };
+  /** «قضاء ما فات» (qadaStore) — private: only totals ever leave the device. */
+  qada?: Pick<import('@/services/qadaPlan').QadaData, 'debts' | 'paid'>;
+  /** «برامج التدرّج» (programsStore runs). */
+  programs?: import('@/store/programsModel').ProgramRun[];
+  /** «محاسبة الجمعة»: reviews by Friday (completed? kept last week's resolve?) and each Friday's ticked sunan. */
+  fridayReview?: { reviews: Record<string, { doneAt?: number; kept?: string } | undefined>; sunan?: Record<string, string[]> };
+  /** Completed group khatmas the user read in, per day (groupsStore cache). */
+  groupKhatmas?: Record<string, number>;
   tasks: { repeat: string; done: boolean; history?: Record<string, number> }[];
   asmaStudied: number;
   hadithFavorites: number;
@@ -430,7 +453,19 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
   const quranRun = run(quranModule, now, frozenFor('quran'));
   // Khatma types each at their own pace — never summed across types.
   const qt = quranTypeStats(s.mushafi.days, s.mushafi.khatmas, s.mushafi.marks, today, s.mushafi.tops);
-  const typeRun = (ty: QuranType) => run(Object.keys(qt[ty].days), now, frozenFor('quran'));
+  // Sessions (مصحفي «جلسة»): listening and review add to their tracks — beyond what the khatmas counted.
+  const ses = sessionStats(s.mushafi.sessions ?? []);
+  const sesPages = { listen: 0, review: 0 };
+  const sesDays = { listen: new Set<string>(), hifz: new Set<string>() };
+  for (const x of ses.items) {
+    const c = sessionCredit(x, qt);
+    sesPages.listen += c.listen;
+    sesPages.review += c.review;
+    if (c.listen > 0) sesDays.listen.add(x.day);
+    if (c.review > 0) sesDays.hifz.add(x.day);
+  }
+  const typeRun = (ty: QuranType) =>
+    run([...Object.keys(qt[ty].days), ...(ty === 'listen' || ty === 'hifz' ? sesDays[ty] : [])], now, frozenFor('quran'));
   const listenRun = typeRun('listen');
   const tafsirRun = typeRun('tafsir');
   const reviewRun = typeRun('hifz');
@@ -521,6 +556,43 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
   const completeKeys = daysWhere(completeDay);
   const completeRun = run(completeKeys, now, excusedSet);
 
+  // ── صلة الرحم ──
+  const silat = s.silat ? silatBadgeMetrics(s.silat.people, s.silat.entries, today) : null;
+  const silatDays = new Set((s.silat?.entries ?? []).map((e) => e.day));
+
+  // ── برامج التدرّج: per template, the running attempt's step and the best ever (a finish = all of it) ──
+  const runs = s.programs ?? [];
+  const programs = programBadgeFacts(runs, s, now);
+  const programLive = new Map<string, number>();
+  const programBest = new Map<string, number>();
+  const programDays = new Set<string>();
+  for (const r of runs) {
+    const ev = evaluateRun(r, s, now);
+    const id = r.templateId ?? 'custom';
+    if (r.status === 'active') programLive.set(id, Math.max(programLive.get(id) ?? 0, ev.step));
+    programBest.set(id, Math.max(programBest.get(id) ?? 0, ev.finishedOn ? ev.total : ev.best));
+    for (const d of ev.days) if (d.state === 'done') programDays.add(d.key);
+  }
+
+  // ── محاسبة الجمعة ──
+  const reviews = s.fridayReview?.reviews ?? {};
+  const muhasaba = reviewStreak(reviews, now);
+  const reviewDays = new Set(Object.values(reviews).flatMap((r) => (r?.doneAt ? [keyOf(new Date(r.doneAt))] : [])));
+
+  // ── قضاء ما فات: a Ramadan's fasts all made up before the next Ramadan (payments settle the oldest first) ──
+  const qada = s.qada ?? { debts: [], paid: {} };
+  const paidFasts = fastPaidDays(qada.paid);
+  const owedByYear = new Map<number, number>();
+  for (const d of qada.debts) if (d.kind === 'fast' && d.count > 0) owedByYear.set(d.year, (owedByYear.get(d.year) ?? 0) + Math.floor(d.count));
+  let owedSoFar = 0;
+  let ramadanSettled = 0;
+  for (const [year, n] of [...owedByYear].sort((a, c) => a[0] - c[0])) {
+    owedSoFar += n;
+    const last = paidFasts[owedSoFar - 1];
+    if (last && last < keyOf(dueDateOf(year, s.hijriOffset))) ramadanSettled++;
+  }
+  const qadaOn = (k: string) => Object.values(qada.paid[k] ?? {}).some((n) => (n ?? 0) > 0);
+
   const value: Record<BadgeMetric, number> = {
     overall_streak: overall.current,
     active_days: active.length,
@@ -588,13 +660,15 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
     quran_khatmat: s.khatmasFinished,
     quran_wird_days: s.quranWirdDays.length,
     quran_wird_streak: quranWirdRun.current,
-    listen_pages: qt.listen.pages,
+    listen_pages: qt.listen.pages + Math.floor(sesPages.listen),
     listen_streak: listenRun.current,
     listen_khatmat: qt.listen.finished,
     tafsir_pages: qt.tafsir.pages,
     tafsir_streak: tafsirRun.current,
     tafsir_khatmat: qt.tafsir.finished,
-    review_pages: qt.hifz.pages,
+    review_pages: qt.hifz.pages + Math.floor(sesPages.review),
+    memorized_pages: ses.memorized,
+    memorized_juz: ses.juz,
     review_streak: reviewRun.current,
     review_khatmat: qt.hifz.finished,
     quran_types_open: QURAN_TYPE_IDS.filter((ty) => qt[ty].running.some((x) => x.live)).length,
@@ -660,6 +734,32 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
     day_mosque_sunnah: countWhere((k) => mosqueFullOn(k) && rawatibFull(k)),
     day_khayr: countWhere((k) => fastDays.has(k) && sadaqahDays.has(k) && qiyamAround(k)),
     day_ihsan: countWhere((k) => golden(k) && fastDays.has(k) && sadaqahDays.has(k)),
+
+    silat_kin: silat?.kinContacts ?? 0,
+    silat_parent_dua: silat?.parentDuaDays ?? 0,
+    silat_visits: silat?.visits ?? 0,
+    silat_weeks: silat?.coverageWeeks ?? 0,
+    silat_neighbors: silat?.neighborsReached ?? 0,
+    silat_reconciled: silat?.reconciled ?? 0,
+
+    program_takbeer: programLive.get('takbeer40') ?? 0,
+    program_on_time: programLive.get('onTime40') ?? 0,
+    program_qiyam: programLive.get('qiyam30') ?? 0,
+    programs_finished: programs.finished,
+    program_comebacks: programs.comebacks,
+
+    muhasaba_streak: muhasaba.current,
+    muhasaba_kept: Object.values(reviews).filter((r) => r?.kept === 'yes').length,
+    // Ticked in محاسبة الجمعة, or read/heard whole in مصحفي's sessions that Friday — each Friday once.
+    friday_kahf: new Set([
+      ...Object.entries(s.fridayReview?.sunan ?? {}).filter(([, ids]) => ids?.includes('kahf')).map(([d]) => d),
+      ...ses.kahfFridays,
+    ]).size,
+
+    qada_prayers: prayerTotals(qada).paidTotal,
+    qada_ramadan: ramadanSettled,
+
+    group_khatmat: Object.values(s.groupKhatmas ?? {}).reduce((a, n) => a + (n || 0), 0),
   };
 
   const best: Partial<Record<BadgeMetric, number>> = {
@@ -693,6 +793,10 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
     study_week_streak: studyWeeks.longest,
     habits_streak: habitsRun.longest,
     day_prayer_complete_streak: completeRun.longest,
+    program_takbeer: programBest.get('takbeer40') ?? 0,
+    program_on_time: programBest.get('onTime40') ?? 0,
+    program_qiyam: programBest.get('qiyam30') ?? 0,
+    muhasaba_streak: muhasaba.longest,
   };
 
   // ── «تحديات اليوم» ──
@@ -768,6 +872,8 @@ export function computeBadgeMetrics(s: BadgeSnapshot): BadgeMetrics {
     days: share((k) => guarded(k) || completeDay(k) || ishraq(k) || dhikrAll(k)),
     steadfast: share((k) => activeSet.has(k)),
     seasons: 0, // waits for its season, not for effort
+    silat: share((k) => silatDays.has(k), 8), // ≈ twice a week
+    tazkiya: share((k) => programDays.has(k) || qadaOn(k) || reviewDays.has(k)),
   };
 
   return { value, best, today: todayCombos, activity };
@@ -916,7 +1022,7 @@ export interface DoorStanding {
 }
 
 /** Doors only some users have (owner): never «waiting» for someone who never opened them. */
-const OPTIONAL_DOORS = new Set<BadgeCategory>(['habits', 'knowledge']);
+const OPTIONAL_DOORS = new Set<BadgeCategory>(['habits', 'knowledge', 'silat', 'tazkiya']);
 
 /**
  * Where the user is strong and which doors wait, judged on the LAST FOUR WEEKS

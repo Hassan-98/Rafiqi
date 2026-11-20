@@ -26,6 +26,8 @@ serde_json = "1"
 sha2 = "0.11"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 percent-encoding = "2"
+# desktopShell.fetchText (lesson links): Windows' own TLS (schannel) — rustls/aws-lc would need cmake + nasm.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
 
 [profile.release]
 codegen-units = 1

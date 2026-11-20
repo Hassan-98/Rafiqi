@@ -51,7 +51,7 @@ const GROUPS: { id: TargetRecurrence; title: string }[] = [
 ];
 
 /**
- * «الأوراد» segment of the وِرد وقيام tab: today's summary with the next wird
+ * «الأوراد» segment of the عباداتي tab: today's summary with the next wird
  * to continue, any streak-rescue offers, then the awrad grouped by cadence
  * (unfinished first), the progress insights, and the finished one-offs.
  */

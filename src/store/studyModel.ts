@@ -107,6 +107,12 @@ export interface LessonLog {
   status: LessonStatus;
   notes?: string;
   durationMin?: number;
+  /** Its lesson was removed from the series list: the record (and its points) stay, outside the numbering. */
+  detached?: boolean;
+  /** Only part of lesson n, `durationMin` = the minutes watched then: study time and points, not a finished lesson. */
+  partial?: boolean;
+  /** Marked done to say «I've reached here» (watched before the app): no points, no streak day. */
+  backfill?: boolean;
 }
 
 export type CircleStatus = 'active' | 'paused' | 'done';
@@ -131,6 +137,8 @@ export interface StudyCircle {
   /** Series only: a daily study nudge at `time` until `lessons` are done today. */
   dailyGoal?: { enabled: boolean; time: string; lessons: number };
   totalLessons?: number;
+  /** Series read from its link (services/lessonLink.ts), in order: lesson n = episodes[n-1] — its title, length and link. */
+  episodes?: { title: string; durationMin?: number; url?: string }[];
   /** Newest first. */
   log: LessonLog[];
   status: CircleStatus;
@@ -341,7 +349,83 @@ export function nextSession(c: StudyCircle, now: number): NextSession | null {
   return best;
 }
 
-export const lessonsDone = (c: StudyCircle): number => c.log.filter((l) => l.status !== 'missed').length;
+export const lessonsDone = (c: StudyCircle): number => c.log.filter((l) => l.status !== 'missed' && !l.partial).length;
+
+// ── a series' lesson list («جدول المتابعة») ─────────────────────────────────
+
+export type Episode = NonNullable<StudyCircle['episodes']>[number];
+
+/** The series' lessons as rows: its episodes, or one unnamed row per lesson of a series of known size. */
+export function lessonList(c: StudyCircle): Episode[] {
+  if (c.episodes?.length) return c.episodes;
+  return Array.from({ length: c.totalLessons ?? 0 }, () => ({ title: '' }));
+}
+
+// ── progress inside a lesson («وصلت إلى الدقيقة …») ─────────────────────────
+
+/** A recorded circle that is ONE lesson (a single video) — not a series (owner 2026-11-19). */
+export const isSingleLesson = (c: StudyCircle): boolean => c.format === 'series' && lessonList(c).length === 1;
+
+/** Lesson n: the minutes already watched of it (its partial logs) and whether it is finished. */
+export function lessonProgress(c: StudyCircle, n: number): { minutes: number; done: boolean } {
+  let minutes = 0;
+  let done = false;
+  for (const l of c.log) {
+    if (l.n !== n || l.status === 'missed') continue;
+    if (l.partial) minutes += l.durationMin ?? 0;
+    else done = true;
+  }
+  return { minutes, done };
+}
+
+type NewLog = Omit<LessonLog, 'id'>;
+
+/**
+ * «وصلت في الدرس n إلى الدقيقة m»: a partial log for the minutes gained since the
+ * last mark — or, once m reaches the lesson's length (len), the finishing log
+ * for the rest. Nothing when the lesson is already done or m isn't further on.
+ */
+export function progressLogs(c: StudyCircle, n: number, m: number, at: number, len?: number): NewLog[] {
+  const { minutes, done } = lessonProgress(c, n);
+  if (done) return [];
+  const title = lessonList(c)[n - 1]?.title || undefined;
+  if (len && m >= len) return [{ n, title, date: at, status: 'watched', durationMin: Math.max(1, len - minutes) }];
+  if (m <= minutes) return [];
+  return [{ n, title, date: at, status: 'watched', partial: true, durationMin: Math.round(m - minutes) }];
+}
+
+/** «وصلت إلى الدرس x»: every lesson before it not yet done is marked as watched before (no points). */
+export function reachLogs(c: StudyCircle, x: number, at: number): NewLog[] {
+  const list = lessonList(c);
+  const out: NewLog[] = [];
+  for (let n = 1; n < x; n++) {
+    if (!lessonProgress(c, n).done) out.push({ n, title: list[n - 1]?.title || undefined, date: at, status: 'watched', backfill: true });
+  }
+  return out;
+}
+
+/** A row of the edited list: `orig` = its lesson number before the edit (null = added now). */
+export interface LessonRow extends Episode {
+  orig: number | null;
+}
+
+/**
+ * The circle after editing its lesson list (owner 2026-11-19: add, remove, rename,
+ * reorder). Each log follows its lesson to its new number and takes its new
+ * title; a removed lesson's log keeps its record without a number (history and
+ * points stay), and lessons not watched stay unwatched.
+ */
+export function applyLessonRows(c: StudyCircle, rows: LessonRow[]): Pick<StudyCircle, 'episodes' | 'totalLessons' | 'log'> {
+  const episodes: Episode[] = rows.map(({ title, durationMin, url }) => ({ title: title.trim(), ...(durationMin ? { durationMin } : {}), ...(url ? { url } : {}) }));
+  const at = new Map(rows.map((r, i) => [r.orig, i] as const));
+  const log = c.log.map((l) => {
+    if (!l.n) return l;
+    const i = at.get(l.n);
+    if (i === undefined) return { ...l, n: undefined, detached: true };
+    return { ...l, n: i + 1, title: episodes[i].title || l.title };
+  });
+  return { episodes, totalLessons: episodes.length || undefined, log };
+}
 
 /** 0–1 for a series with a known total, else null. */
 export function completion(c: StudyCircle): number | null {
@@ -388,12 +472,12 @@ export function dayStreak(keys: Set<string>, now: number): number {
 /** Study streak across every circle: days with a lesson attended/watched. */
 export function studyStreak(circles: StudyCircle[], now: number): number {
   const keys = new Set<string>();
-  for (const c of circles) for (const l of c.log) if (l.status !== 'missed') keys.add(dayKey(l.date));
+  for (const c of circles) for (const l of c.log) if (l.status !== 'missed' && !l.backfill) keys.add(dayKey(l.date));
   return dayStreak(keys, now);
 }
 
 export function lessonsOnDay(c: StudyCircle, key: string): number {
-  return c.log.filter((l) => l.status !== 'missed' && dayKey(l.date) === key).length;
+  return c.log.filter((l) => l.status !== 'missed' && !l.partial && !l.backfill && dayKey(l.date) === key).length;
 }
 
 // ── task computations ────────────────────────────────────────────────────────

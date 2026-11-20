@@ -1,4 +1,4 @@
-import { BookOpen, CalendarHeart, Flame, Gem, Gift, GraduationCap, Landmark, ListChecks, Moon, MoonStar, Sparkles, Sun, Target } from 'lucide-react';
+import { BookOpen, CalendarHeart, Flame, Gem, Gift, GraduationCap, HeartHandshake, Landmark, ListChecks, Moon, MoonStar, Sparkles, Sprout, Sun, Target } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Mosque } from '@/components/icons/Mosque';
 import { arCount } from '@/services/insightsEngine';
@@ -19,8 +19,10 @@ export const CATEGORY_ICON: Record<BadgeCategory, LucideIcon | typeof Mosque> = 
   fasting: Moon,
   seasons: CalendarHeart,
   sadaqah: Gift,
+  silat: HeartHandshake,
   knowledge: GraduationCap,
   habits: ListChecks,
+  tazkiya: Sprout,
   steadfast: Flame,
 };
 

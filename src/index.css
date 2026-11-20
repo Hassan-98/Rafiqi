@@ -2340,3 +2340,104 @@ html[data-quran-reader] .audio-dock {
   bottom: calc(var(--safe-bottom) + 0.5rem);
   padding-inline-start: 0.75rem;
 }
+
+/* «تذكرة الإتقان»: a typist's cursor — a steady on/off blink, not a fade. */
+.mindful-caret {
+  animation: mindful-blink 1.05s steps(1, end) infinite;
+}
+@keyframes mindful-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mindful-caret {
+    animation: none;
+  }
+}
+
+/* ── «التيجان» (components/crowns) ───────────────────
+   Gem tokens for the crowns' jewels (the same in every palette — a ruby is a
+   ruby), the month's sheen, the dominant lead's twinkle, and the crowning
+   moment: the crown descends, a ring of light spreads once. transform/opacity
+   only; still under reduced motion (html.reduce-motion freezes them too). */
+:root {
+  --crown-gem-emerald: #13a37c;
+  --crown-gem-ruby: #c43a55;
+}
+html.dark {
+  --crown-gem-emerald: #2fc596;
+  --crown-gem-ruby: #e0566f;
+}
+@keyframes crown-sheen {
+  0%,
+  58% {
+    transform: translateX(-12px);
+  }
+  100% {
+    transform: translateX(40px);
+  }
+}
+.crown-sheen {
+  animation: crown-sheen 5.2s ease-in-out infinite;
+}
+@keyframes crown-twinkle {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.55) rotate(45deg);
+    opacity: 0.55;
+  }
+}
+.crown-twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: crown-twinkle 2.8s ease-in-out infinite;
+}
+@keyframes crown-descend {
+  0% {
+    transform: translateY(-34px) scale(0.72) rotate(-6deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(5px) scale(1.06) rotate(1.5deg);
+    opacity: 1;
+  }
+  78% {
+    transform: translateY(-2px) scale(0.99) rotate(0deg);
+  }
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+.crown-descend {
+  animation: crown-descend 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+@keyframes crown-ring {
+  0% {
+    transform: scale(0.45);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+.crown-ring {
+  animation: crown-ring 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.7s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crown-sheen,
+  .crown-twinkle,
+  .crown-descend,
+  .crown-ring {
+    animation: none;
+  }
+}

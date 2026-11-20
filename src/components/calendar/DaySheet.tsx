@@ -18,6 +18,8 @@ import {
   type CalendarEvent,
 } from '@/services/calendarEvents';
 import { EVENT_META } from './eventMeta';
+import { QadaFastToggle } from '@/components/qada/QadaFastToggle';
+import { setQadaFast } from '@/store/qadaStore';
 import type { UserCalendarEvent } from './useDayEvents';
 
 interface DaySheetProps {
@@ -61,6 +63,7 @@ function DayBody({ day, user, onClose, onWorshipDetail }: Required<Omit<DaySheet
     const store = useProgressStore.getState();
     if (fasted) {
       store.unmarkModuleComplete('fasting', day.key);
+      setQadaFast(day.key, false, false);
       toast.info('تم إلغاء تسجيل الصيام');
     } else {
       store.markModuleComplete('fasting', 1, day.key);
@@ -120,6 +123,7 @@ function DayBody({ day, user, onClose, onWorshipDetail }: Required<Omit<DaySheet
           </p>
         )
       ) : null}
+      <QadaFastToggle dayKey={day.key} />
 
       {/* The user's own items */}
       {mine.length ? (

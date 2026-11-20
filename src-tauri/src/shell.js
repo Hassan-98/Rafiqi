@@ -36,6 +36,9 @@
     mushafi: {
       open: (page) => invoke('shell_open_mushafi', { page: Number.isInteger(page) ? page : null }),
     },
+    // Another site's page as text (lesson links; the webview's fetch is CORS-blocked) — lib.rs shell_fetch_text.
+    fetchText: (url, init = {}) =>
+      invoke('shell_fetch_text', { url, method: init.method ?? null, headers: init.headers ?? null, body: init.body ?? null }),
     updates: {
       nativeVersion: () => invoke('shell_native_version'),
       // Downloaded here (the update host sends CORS *) so the dialog gets real

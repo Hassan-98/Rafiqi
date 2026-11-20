@@ -64,6 +64,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- «وضع الصلاة»: START/END alarms + «إنهاء الآن» / «صلّيت» / «في المسجد»
+             (explicit intents only, so no intent-filter). -->
+        <receiver
+            android:name=".PrayerModeReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -234,6 +240,9 @@
     <!-- Wake the screen for the adhan alarm (full-screen / heads-up) -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <!-- «وضع الصلاة»: switch Do-not-disturb on for the prayer, then back
+         (granted by the user in «الوصول إلى وضع عدم الإزعاج»). -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <!-- Voice recite-test (التسميع) in the memorization screen.
          MODIFY_AUDIO_SETTINGS is REQUIRED alongside RECORD_AUDIO for the

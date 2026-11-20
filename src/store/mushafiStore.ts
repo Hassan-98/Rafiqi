@@ -3,11 +3,14 @@ import { persist } from 'zustand/middleware';
 import { format } from 'date-fns';
 import { safeStorage } from './safeStorage';
 import { QURAN_TYPE_IDS, quranTypeOf, type QuranType } from '@/data/quranTypes';
+import { PAGE_FIRST_AYAH } from '@/data/quranPages';
+import { JUZ_START_PAGES } from '@/data/juz';
+import { surahs } from '@/data/surahs';
 
 /**
  * «مصحفي» — the Quran lives in a separate app (H:\Works\mushaf). Its sync
  * server (a secret 16-letter code → one JSON) is where reading is recorded:
- * pages read per day, khatmas, bookmarks. This app only READS that state —
+ * pages read per day, khatmas, bookmarks, sessions. This app only READS that state —
  * it never writes Quran progress of its own.
  *
  * Shapes mirror mushaf/sync-server/api/sync.js.
@@ -45,10 +48,33 @@ export interface MushafiMark {
   del?: 1;
 }
 
+/** A session's kind. NB: `hifz` here is NEW memorization — a khatma's `ty: 'hifz'` is review (مراجعة). */
+export type SessionType = 'tilawa' | 'listen' | 'hifz' | 'review';
+
+/**
+ * «جلسة» in مصحفي: reading, listening, memorizing or reviewing from any place,
+ * outside the khatmas — started and stopped there, or entered by hand after the fact.
+ */
+export interface MushafiSession {
+  id: string;
+  ty: SessionType;
+  /** First and last ayah, inclusive: 0 = الفاتحة ١ … 6235 = الناس ٦. */
+  a: number;
+  z: number;
+  /** Start and end (ms). A manual entry of unknown length has e === s. */
+  s: number;
+  e: number;
+  /** 1 = entered by hand after it happened. */
+  m?: 1;
+  t: number;
+  del?: 1;
+}
+
 export interface MushafiRemote {
   days?: Record<string, number[]>;
   khatmas?: MushafiKhatma[];
   marks?: MushafiMark[];
+  sessions?: MushafiSession[];
 }
 
 // ── pure helpers ────────────────────────────────────────────────────────────
@@ -182,6 +208,8 @@ export interface TypeStats {
   running: KhatmaState[];
   /** Pages it advanced per day — its khatmas' newly covered pages, dated by the reading log. */
   days: Record<string, number>;
+  /** Which pages those were, per day — a session over the same pages isn't credited twice. */
+  pagesOn: Record<string, Set<number>>;
 }
 
 /**
@@ -220,7 +248,7 @@ export function quranTypeStats(
   tops?: RibbonTops,
 ): Record<QuranType, TypeStats> {
   const out = Object.fromEntries(
-    QURAN_TYPE_IDS.map((t) => [t, { type: t, pages: 0, finished: 0, running: [], days: {} } as TypeStats]),
+    QURAN_TYPE_IDS.map((t) => [t, { type: t, pages: 0, finished: 0, running: [], days: {}, pagesOn: {} } as TypeStats]),
   ) as Record<QuranType, TypeStats>;
   const pageDays = new Map<number, string[]>();
   for (const d of Object.keys(days).sort()) {
@@ -242,12 +270,20 @@ export function quranTypeStats(
     const seen = rec ? Object.keys(rec).filter((d) => d !== '_base').sort() : [];
     const ribbonDay = (p: number) => (rec && p > rec._base ? seen.find((d) => rec[d] >= p) : undefined);
     const byRibbon: Record<string, number> = {};
+    const ribbonPages: Record<string, number[]> = {};
+    const credit = (d: string, p: number) => {
+      t.days[d] = (t.days[d] ?? 0) + 1;
+      (t.pagesOn[d] ??= new Set()).add(p);
+    };
     for (let p = k.b + 1; p <= st.top; p++) {
       const logged = pageDays.get(p)?.find((x) => x >= k.s && (!k.f || x <= k.f));
-      if (logged) t.days[logged] = (t.days[logged] ?? 0) + 1;
+      if (logged) credit(logged, p);
       else {
         const d = ribbonDay(p);
-        if (d) byRibbon[d] = (byRibbon[d] ?? 0) + 1;
+        if (d) {
+          byRibbon[d] = (byRibbon[d] ?? 0) + 1;
+          (ribbonPages[d] ??= []).push(p);
+        }
       }
     }
     // A hand-moved ribbon dates at most a heavy day — two days of the plan, two juz at least.
@@ -256,8 +292,11 @@ export function quranTypeStats(
     // later day = catching up → the cap. The reading log is never capped.
     const cap = Math.max(40, 2 * Math.ceil(st.total / Math.max(1, k.d)));
     for (const [d, n] of Object.entries(byRibbon)) {
-      const credit = n <= cap ? n : d === k.s ? 0 : cap;
-      if (credit) t.days[d] = (t.days[d] ?? 0) + credit;
+      const got = n <= cap ? n : d === k.s ? 0 : cap;
+      if (!got) continue;
+      t.days[d] = (t.days[d] ?? 0) + got;
+      // ponytail: capped, it isn't known WHICH pages were read — all of them count as the khatma's that day
+      for (const p of ribbonPages[d]) (t.pagesOn[d] ??= new Set()).add(p);
     }
     // Pages read just AHEAD of the ribbon count on the day they were read (owner:
     // progress counts as you read, not only once the ribbon is moved at the end of
@@ -268,12 +307,153 @@ export function quranTypeStats(
       const ahead = Math.min(st.total + k.b, st.top + Math.max(40, 2 * st.share));
       for (let p = st.top + 1; p <= ahead; p++) {
         const d = pageDays.get(p)?.find((x) => x >= k.s);
-        if (d) t.days[d] = (t.days[d] ?? 0) + 1;
+        if (d) credit(d, p);
       }
     }
   }
   for (const t of QURAN_TYPE_IDS) out[t].running.sort((a, b) => b.owe - a.owe);
   return out;
+}
+
+// ── sessions ──────────────────────────────────────────────────────────────
+
+const NA = 6236;
+let pageTable: Uint16Array | null = null;
+/** Standard (604) page of ayah i. */
+export function pageOfAyah(i: number): number {
+  if (!pageTable) {
+    const t = (pageTable = new Uint16Array(NA));
+    PAGE_FIRST_AYAH.forEach((first, j) => t.fill(j + 1, first, PAGE_FIRST_AYAH[j + 1] ?? NA));
+  }
+  return pageTable[i];
+}
+const ayatOnPage = (p: number) => (PAGE_FIRST_AYAH[p] ?? NA) - PAGE_FIRST_AYAH[p - 1];
+/** Each surah's first ayah index (0-based by surah). */
+export const SURAH_FIRST = surahs.reduce<number[]>((a, _, j) => (a.push(j ? a[j - 1] + surahs[j - 1].versesCount : 0), a), []);
+/** Ayah index → [surah, ayah] (1-based). */
+export function ayahKey(i: number): [number, number] {
+  let s = SURAH_FIRST.length - 1;
+  while (SURAH_FIRST[s] > i) s--;
+  return [s + 1, i - SURAH_FIRST[s] + 1];
+}
+const KAHF: [number, number] = [SURAH_FIRST[17], SURAH_FIRST[18] - 1];
+
+export interface SessionItem extends MushafiSession {
+  /** Its day: the local date it began. */
+  day: string;
+  /** Its length; 0 = not known (a manual entry without one). */
+  minutes: number;
+  /** Page → the share of it the session covered (by ayat — ponytail: a long ayah weighs as a short one). */
+  pages: Map<number, number>;
+  /** hifz only: the share memorized for the FIRST time — no earlier hifz/review session held it. */
+  fresh: Map<number, number>;
+}
+
+export interface SessionStats {
+  /** Oldest first. */
+  items: SessionItem[];
+  byDay: Map<string, SessionItem[]>;
+  /** Per page (index page−1): when the whole page was last memorized or reviewed — its oldest ayah's last time; 0 = not every ayah of it is memorized. */
+  pageTouched: number[];
+  /** Pages memorized whole (every ayah in a hifz or review session), and whole ajzaa. */
+  memorized: number;
+  juz: number;
+  /** Fridays on which the day's tilawa/listen sessions together covered all of سورة الكهف. */
+  kahfFridays: Set<string>;
+}
+
+const statsCache = new WeakMap<readonly MushafiSession[], SessionStats>();
+
+/**
+ * The sessions, read once per list (cached): each one's pages, what a hifz session memorized
+ * for the first time, the memorized pages and ajzaa, and the Fridays with الكهف.
+ * Memorized = in ANY hifz or review session — reviewing what you memorized long ago records it.
+ */
+export function sessionStats(sessions: readonly MushafiSession[]): SessionStats {
+  const hit = statsCache.get(sessions);
+  if (hit) return hit;
+  const touched = new Float64Array(NA); // last hifz/review per ayah; 0 = never
+  const items: SessionItem[] = [];
+  const byDay = new Map<string, SessionItem[]>();
+  const kahf = new Map<string, Uint8Array>();
+  for (const x of [...sessions].filter((v) => !v.del && v.a <= v.z).sort((p, q) => p.s - q.s)) {
+    const pages = new Map<number, number>();
+    const fresh = new Map<number, number>();
+    const day = format(x.s, 'yyyy-MM-dd');
+    for (let i = x.a; i <= Math.min(x.z, NA - 1); i++) {
+      const p = pageOfAyah(i);
+      pages.set(p, (pages.get(p) ?? 0) + 1); // ayat now, shares below: a whole page is exactly 1
+      if (x.ty === 'hifz' && !touched[i]) fresh.set(p, (fresh.get(p) ?? 0) + 1);
+      if (x.ty === 'hifz' || x.ty === 'review') touched[i] = Math.max(touched[i], x.e);
+      if ((x.ty === 'tilawa' || x.ty === 'listen') && i >= KAHF[0] && i <= KAHF[1] && new Date(x.s).getDay() === 5) {
+        let seen = kahf.get(day);
+        if (!seen) kahf.set(day, (seen = new Uint8Array(KAHF[1] - KAHF[0] + 1)));
+        seen[i - KAHF[0]] = 1;
+      }
+    }
+    for (const m of [pages, fresh]) for (const [p, n] of m) m.set(p, n / ayatOnPage(p));
+    const it: SessionItem = { ...x, day, minutes: Math.max(0, (x.e - x.s) / 60_000), pages, fresh };
+    items.push(it);
+    byDay.set(day, [...(byDay.get(day) ?? []), it]);
+  }
+  const pageTouched = PAGE_FIRST_AYAH.map((first, j) => {
+    let lo = Infinity;
+    for (let i = first; i < (PAGE_FIRST_AYAH[j + 1] ?? NA); i++) lo = Math.min(lo, touched[i]);
+    return lo;
+  });
+  const juz = JUZ_START_PAGES.filter((first, j) => {
+    for (let p = first; p < (JUZ_START_PAGES[j + 1] ?? 605); p++) if (!pageTouched[p - 1]) return false;
+    return true;
+  }).length;
+  const out: SessionStats = {
+    items,
+    byDay,
+    pageTouched,
+    memorized: pageTouched.filter(Boolean).length,
+    juz,
+    kahfFridays: new Set([...kahf].filter(([, seen]) => seen.every(Boolean)).map(([d]) => d)),
+  };
+  statsCache.set(sessions, out);
+  return out;
+}
+
+export interface SessionCredit {
+  /** Pages, after what the same day's khatmas already counted (each page once). */
+  tilawa: number;
+  listen: number;
+  /** Reviewed — a review session, and a hifz session over what was memorized before. */
+  review: number;
+  /** Memorized for the first time. */
+  hifz: number;
+}
+
+/**
+ * What one session adds beyond the khatmas (`qt`, quranTypeStats): a page a khatma
+ * already credited that day isn't counted again — reading your khatma's wird inside
+ * a session counts once. Reading = against every reading khatma; listening = against
+ * listening ones; review = against review (ty hifz) ones. New memorization stands alone.
+ */
+export function sessionCredit(x: SessionItem, qt?: Record<QuranType, TypeStats>): SessionCredit {
+  const on = (...tys: QuranType[]) => {
+    const set = new Set<number>();
+    for (const ty of tys) for (const p of qt?.[ty].pagesOn[x.day] ?? []) set.add(p);
+    return set;
+  };
+  const sum = (m: Map<number, number>, skip?: Set<number>) => {
+    let n = 0;
+    for (const [p, f] of m) if (!skip?.has(p)) n += f;
+    return n;
+  };
+  const c: SessionCredit = { tilawa: 0, listen: 0, review: 0, hifz: 0 };
+  if (x.ty === 'tilawa') c.tilawa = sum(x.pages, on('tilawa', 'tafsir', 'hifz'));
+  else if (x.ty === 'listen') c.listen = sum(x.pages, on('listen'));
+  else if (x.ty === 'review') c.review = sum(x.pages, on('hifz'));
+  else {
+    c.hifz = sum(x.fresh);
+    const again = new Map([...x.pages].map(([p, f]) => [p, f - (x.fresh.get(p) ?? 0)]));
+    c.review = sum(again, on('hifz'));
+  }
+  return c;
 }
 
 /** Types with a khatma open on `day` (begun, not yet finished). */
@@ -292,13 +472,28 @@ interface MushafiState {
   days: Record<string, number[]>;
   khatmas: MushafiKhatma[];
   marks: MushafiMark[];
+  /** مصحفي's sessions (none deleted), with the ones recorded here not yet on the server. */
+  sessions: MushafiSession[];
+  /** Recorded or deleted here (HifzPage), sent with the next pull until the server answers with them. */
+  pending: MushafiSession[];
   /** Each khatma's ribbon per day seen (noteTops). */
   tops: RibbonTops;
   syncedAt: number | null;
   status: 'idle' | 'syncing' | 'ok' | 'fail';
   setCode: (code: string | null) => void;
   apply: (remote: MushafiRemote, at: number) => void;
+  /** New sessions, or deletions ({id, t, del: 1}) — shown at once, sent on the next pull. */
+  addSessions: (xs: MushafiSession[]) => void;
+  /** The server has these (same id and t): stop sending them. */
+  sent: (xs: MushafiSession[]) => void;
   setStatus: (s: MushafiState['status']) => void;
+}
+
+/** Per id the newest (by t). */
+export function newestById(...lists: readonly MushafiSession[][]): MushafiSession[] {
+  const by = new Map<string, MushafiSession>();
+  for (const l of lists) for (const x of l) if (!by.has(x.id) || x.t > by.get(x.id)!.t) by.set(x.id, x);
+  return [...by.values()];
 }
 
 export const useMushafiStore = create<MushafiState>()(
@@ -308,10 +503,17 @@ export const useMushafiStore = create<MushafiState>()(
       days: {},
       khatmas: [],
       marks: [],
+      sessions: [],
+      pending: [],
       tops: {},
       syncedAt: null,
       status: 'idle',
-      setCode: (code) => set(code ? { code, status: 'idle' } : { code: null, khatmas: [], marks: [], tops: {}, syncedAt: null, status: 'idle' }),
+      setCode: (code) =>
+        set(
+          code
+            ? { code, status: 'idle' }
+            : { code: null, khatmas: [], marks: [], sessions: [], pending: [], tops: {}, syncedAt: null, status: 'idle' },
+        ),
       apply: (remote, at) =>
         set((s) => {
           // The server keeps ~130 days; ours only grows (older days stay for stats).
@@ -319,21 +521,40 @@ export const useMushafiStore = create<MushafiState>()(
           for (const [k, v] of Object.entries(remote.days ?? {})) days[k] = [...new Set([...(days[k] ?? []), ...v])].sort((a, b) => a - b);
           const khatmas = (remote.khatmas ?? []).filter((k) => !k.del);
           const marks = (remote.marks ?? []).filter((m) => !m.del);
+          // A server from before the sessions sends none: keep ours. Ours not yet sent stay on top.
+          const sessions = newestById(remote.sessions ?? s.sessions, s.pending).filter((x) => !x.del);
           return {
             days,
             khatmas,
             marks,
+            sessions,
             tops: noteTops(s.tops, khatmas, marks, format(at, 'yyyy-MM-dd')),
             syncedAt: at,
             status: 'ok',
           };
         }),
+      addSessions: (xs) =>
+        set((s) => ({
+          sessions: newestById(s.sessions, xs).filter((x) => !x.del),
+          pending: newestById(s.pending, xs),
+        })),
+      sent: (xs) =>
+        set((s) => ({ pending: s.pending.filter((p) => !xs.some((x) => x.id === p.id && x.t === p.t)) })),
       setStatus: (status) => set({ status }),
     }),
     {
       name: 'myzikr:mushafi',
       storage: safeStorage,
-      partialize: ({ code, days, khatmas, marks, tops, syncedAt }) => ({ code, days, khatmas, marks, tops, syncedAt }),
+      partialize: ({ code, days, khatmas, marks, sessions, pending, tops, syncedAt }) => ({
+        code,
+        days,
+        khatmas,
+        marks,
+        sessions,
+        pending,
+        tops,
+        syncedAt,
+      }),
     },
   ),
 );

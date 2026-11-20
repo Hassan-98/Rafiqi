@@ -17,6 +17,8 @@ interface StudyState {
   logSession: (id: string, entry?: Partial<Omit<LessonLog, 'id'>>) => string | undefined;
   updateLog: (id: string, logId: string, patch: Partial<LessonLog>) => void;
   removeLog: (id: string, logId: string) => void;
+  /** Several entries at once (progress: lessons reached + minutes in the current one). */
+  logMany: (id: string, entries: Omit<LessonLog, 'id'>[]) => void;
   /** Mark the next lesson done (series numbering) — same as logSession with n. */
   markLessonDone: (id: string, extra?: Partial<Omit<LessonLog, 'id'>>) => string | undefined;
   /** Undo the most recent log entry. */
@@ -59,14 +61,24 @@ export const useStudyStore = create<StudyState>()(
           const c = get().circles.find((x) => x.id === id);
           if (!c) return undefined;
           const logId = makeId();
+          // A series read from its link knows lesson n's title and length (→ its points on «الترتيب»).
+          const ep = entry.n ? c.episodes?.[entry.n - 1] : undefined;
           const log: LessonLog = {
             date: Date.now(),
             status: c.format === 'live' ? 'attended' : 'watched',
             ...entry,
+            title: entry.title ?? ep?.title,
+            durationMin: entry.durationMin ?? ep?.durationMin,
             id: logId,
           };
           mutate(id, (x) => ({ ...x, log: [log, ...x.log].sort((a, b) => b.date - a.date).slice(0, MAX_LOG) }));
           return logId;
+        },
+
+        logMany: (id, entries) => {
+          if (!entries.length) return;
+          const logs = entries.map((e) => ({ ...e, id: makeId() }) as LessonLog);
+          mutate(id, (x) => ({ ...x, log: [...logs, ...x.log].sort((a, b) => b.date - a.date).slice(0, MAX_LOG) }));
         },
 
         updateLog: (id, logId, patch) =>

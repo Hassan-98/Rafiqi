@@ -64,6 +64,9 @@ public class FullScreenAlarmReceiver extends BroadcastReceiver {
             FullScreenAlarmStore.remove(ctx, spec.key);
         }
 
+        // «وضع الصلاة» is silencing the phone for a prayer: don't ring over it (tomorrow's alarm is re-armed above).
+        if (PrayerModeReceiver.getActive(ctx) != null) return;
+
         // Briefly hold a wakelock so the screen can come on.
         boolean interactive = false;
         try {

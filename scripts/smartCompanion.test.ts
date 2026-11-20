@@ -209,4 +209,136 @@ const ids = (i: CompanionInput) => planCompanion(i).map((n) => n.id);
   assert.ok(!planCompanion(i).some((n) => n.kind === 'invite'));
 }
 
+// ── weekday learning ──
+const all5 = { fajr: { fard: true }, dhuhr: { fard: true }, asr: { fard: true }, maghrib: { fard: true }, isha: { fard: true } };
+// Asr usually missed on Sundays → asked about early on Sundays only, saying why.
+{
+  const i = base();
+  for (let n = 1; n <= 56; n++) {
+    const d = addDays(NOW, -n);
+    i.snap.prayerLog![key(d)] = d.getDay() === 0 ? { ...all5, asr: {} } : { ...all5 };
+  }
+  const plan = planCompanion(i);
+  const sun = plan.find((n) => n.id === 'myzikr_smart_pray_asr')!;
+  assert.equal(format(sun.at, 'HH:mm'), '15:10');
+  assert.ok(sun.body.includes('يوم الأحد'), sun.body);
+  const mon = plan.find((n) => n.id === 'myzikr_smart_pray_asr_d1')!;
+  assert.ok(mon.at.getTime() - hm(mon.at, 14, 50).getTime() >= 30 * 60_000, format(mon.at, 'HH:mm'));
+}
+// A habit drifting later moves the learned minute; a weekday with its own rhythm keeps it.
+{
+  const i = base();
+  i.snap.activity = Array.from({ length: 21 }, (_, n) => ev(ago(n + 1), n < 7 ? 7 : 6, 0, 'dhikr', 'morning'));
+  assert.equal(format(planCompanion(i).find((n) => n.id === 'myzikr_smart_morning_d1')!.at, 'HH:mm'), '07:15');
+  const thu = base();
+  thu.now = new Date(2026, 10, 12, 14, 0); // Thursday → Friday is d1
+  thu.snap.activity = Array.from({ length: 56 }, (_, n) => addDays(thu.now, -(n + 1))).map((d) => ev(key(d), d.getDay() === 5 ? 9 : 6, d.getDay() === 5 ? 0 : 10, 'dhikr', 'morning'));
+  assert.equal(format(planCompanion(thu).find((n) => n.id === 'myzikr_smart_morning_d1')!.at, 'HH:mm'), '09:15');
+  assert.equal(format(planCompanion(thu).find((n) => n.id === 'myzikr_smart_morning_d2')!.at, 'HH:mm'), '06:25');
+}
+
+// ── the day's frame: «موجز الصباح» and «ختام اليوم» ──
+{
+  const i = base();
+  i.quran = { goal: 4, done: 0, unit: 'page' };
+  i.agendaOf = (k) => (k === key(addDays(NOW, 1)) ? ['درس التفسير ٥:٣٠ م'] : []);
+  i.sources = [{ id: 'silat', brief: () => ['اتصل بخالتك'] }];
+  const b = planCompanion(i).find((n) => n.id === 'myzikr_smart_brief_d1');
+  assert.ok(b, planCompanion(i).map((n) => n.id).join());
+  assert.equal(b!.kind, 'brief');
+  for (const part of ['درس التفسير ٥:٣٠ م', 'وردك ٤ صفحات', 'اتصل بخالتك']) assert.ok(b!.body.includes(part), b!.body);
+  const m = b!.at.getHours() * 60 + b!.at.getMinutes();
+  assert.ok(m >= 6 * 60 && m <= 10 * 60 + 45, `after quiet hours, before Dhuhr: ${format(b!.at, 'HH:mm')}`);
+  assert.ok(!/[!0-9]/.test(b!.title + b!.body), b!.body);
+  const off = { ...i, prefs: { ...i.prefs, brief: false } };
+  assert.ok(!planCompanion(off).some((n) => n.kind === 'brief'));
+  const idle = { ...i, snap: { ...i.snap, prayerLog: {} } };
+  assert.ok(!planCompanion(idle).some((n) => n.kind === 'brief' || n.kind === 'wrapup'), 'only for active users');
+  const thin = base();
+  assert.ok(!planCompanion(thin).some((n) => n.id === 'myzikr_smart_brief_d1'), 'one fact is not a brief');
+}
+{
+  const i = base();
+  i.quran = { goal: 4, done: 1, unit: 'page' };
+  i.snap.wirdHistory = Object.fromEntries([1, 2, 3, 4, 5].map((n) => [ago(n), { unit: 'page', amount: 4, achieved: 4 }]));
+  const w = planCompanion(i).find((n) => n.id === 'myzikr_smart_wrapup')!;
+  assert.ok(w, planCompanion(i).map((n) => n.id).join());
+  assert.equal(format(w.at, 'HH:mm'), '22:20', 'forty minutes before the quiet hours (no learned bedtime)');
+  assert.ok(w.body.startsWith('بقي ممكناً: الوتر، أذكار المساء، ٣ صفحات من وردك، أذكار النوم'), w.body);
+  assert.ok(w.body.includes('سلسلة وردك ٥ أيام'), w.body);
+  // The wird's own last call stands down: the wrap-up names it.
+  assert.ok(!planCompanion(i).some((n) => n.id === 'myzikr_smart_quran_last'));
+  // All done but the sleep adhkar: no wrap-up.
+  const done = base();
+  done.snap.qiyamNights = { [key(NOW)]: { nightKey: key(NOW), rakaat: 2, witr: true, loggedAt: 0 } };
+  done.snap.activity = [ev(key(NOW), 13, 0, 'dhikr', 'evening')];
+  assert.ok(!planCompanion(done).some((n) => n.id === 'myzikr_smart_wrapup'));
+  // A learned bedtime: the wrap-up comes before it, and that night's sleep nudge stands down.
+  const bed = base();
+  bed.snap.activity = [1, 2, 3, 4].map((n) => ev(ago(n), 23, 30, 'dhikr', 'sleep'));
+  const plan = planCompanion(bed);
+  assert.equal(format(plan.find((n) => n.id === 'myzikr_smart_wrapup')!.at, 'HH:mm'), '22:50');
+  assert.ok(!plan.some((n) => n.kind === 'sleep' && n.at.toDateString() === NOW.toDateString()), plan.map((n) => n.id).join());
+  const noWrap = { ...bed, prefs: { ...bed.prefs, wrapup: false } };
+  assert.ok(planCompanion(noWrap).some((n) => n.id === 'myzikr_smart_sleep'), 'without the wrap-up the sleep nudge stays');
+}
+
+// ── ONE «قبل أن يفوت وقتها» for a streak of three days or more ──
+{
+  const i = base();
+  i.now = hm(NOW, 7, 0);
+  i.snap.activity = [1, 2, 3, 4, 5].map((n) => ev(ago(n), 6, 10, 'dhikr', 'morning'));
+  const plan = planCompanion(i);
+  const last = plan.find((n) => n.id === 'myzikr_smart_morning_last')!;
+  assert.ok(last, plan.map((n) => n.id).join());
+  assert.equal(format(last.at, 'HH:mm'), '11:00');
+  assert.ok(last.body.includes('سلسلتك ٥ أيام'), last.body);
+  assert.ok(plan.some((n) => n.id === 'myzikr_smart_morning'), 'the usual one first');
+  i.snap.activity = [1, 2].map((n) => ev(ago(n), 6, 10, 'dhikr', 'morning'));
+  assert.ok(!planCompanion(i).some((n) => n.id === 'myzikr_smart_morning_last'), 'two days are not yet a streak to rescue');
+  // الضحى kept daily: its own last call.
+  const d = base();
+  d.now = hm(NOW, 9, 0);
+  d.snap.duha = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [ago(n), 2]));
+  const duha = planCompanion(d).find((n) => n.id === 'myzikr_smart_duha_last');
+  assert.equal(duha && format(duha.at, 'HH:mm'), '11:00');
+}
+
+// ── السحور for a fast the user intends ──
+{
+  const i = base();
+  assert.ok(!planCompanion(i).some((n) => n.kind === 'suhoor'), 'no intent, no habit: no pre-dawn alarm');
+  i.fastIntent = key(addDays(NOW, 1));
+  const s = planCompanion(i).find((n) => n.id === 'myzikr_smart_suhoor_d1')!;
+  assert.ok(s);
+  assert.equal(format(s.at, 'HH:mm'), '04:00', 'forty minutes before Fajr, inside quiet hours');
+  assert.ok(s.title.includes('السحور') && s.body.includes('الإثنين'), `${s.title} ${s.body}`);
+  i.anchors = { suhoor: '03:30' };
+  assert.equal(format(planCompanion(i).find((n) => n.id === 'myzikr_smart_suhoor_d1')!.at, 'HH:mm'), '03:30');
+}
+
+// ── a registered source's own nudges: stable ids, the same delivery rules ──
+{
+  const i = base();
+  i.sources = [
+    {
+      id: 'silat',
+      nudges: (ctx) => [{ key: 'call', title: 'اتصل بخالتك', body: '«من سرّه أن يُبسط له في رزقه… فليصل رحمه»', at: hm(ctx.now, 20, 0), to: '/silat', label: 'صلة الرحم' }],
+      acted: () => null,
+    },
+    {
+      id: 'boom',
+      nudges: () => {
+        throw new Error('boom');
+      },
+    },
+  ];
+  const warn = console.warn;
+  console.warn = () => {};
+  const n = planCompanion(i).find((x) => x.id === 'myzikr_smart_x_silat_call');
+  console.warn = warn;
+  assert.ok(n);
+  assert.deepEqual([n!.kind, n!.topic, n!.label, n!.deepLinkPath, n!.moduleId], ['plugin', 'x.silat.call', 'صلة الرحم', '/#/silat', 'smart.plugin']);
+}
+
 console.log('smartCompanion: ok');

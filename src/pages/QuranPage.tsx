@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router';
 import { format, subDays } from 'date-fns';
 import { surahs } from '@/data/surahs';
-import { BookOpen, Check, Flame, Link2, RefreshCw, Unlink } from 'lucide-react';
+import { BookOpen, Brain, Check, ChevronLeft, Flame, Headphones, Link2, RefreshCw, Repeat, Sprout, Unlink, type LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Medallion, SectionTitle, ArchMotif } from '@/components/ui/Ornament';
@@ -19,20 +19,27 @@ import { computeStreakFromActiveDates } from '@/services/statsService';
 import { QURAN_TYPE_IDS, QURAN_TYPES, type QuranType } from '@/data/quranTypes';
 import type { BadgeMetric } from '@/data/badges';
 import { StatsShortcut } from '@/components/stats/StatsShortcut';
+import { GroupsHomeCard } from '@/components/groups/GroupsHomeCard';
 import {
   khatmaState,
   mushafiToday,
   normalizeMushafiCode,
   prettyMushafiCode,
   quranTypeStats,
+  sessionCredit,
+  sessionStats,
   useMushafiStore,
   type KhatmaState,
   type MushafiToday,
+  type SessionItem,
+  type SessionStats,
+  type SessionType,
   type TypeStats,
 } from '@/store/mushafiStore';
 import { useQuranStore } from '@/store/quranStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { openMushafi, pullMushafi } from '@/services/mushafi';
+import { hifzModel, rangeTxt } from '@/services/hifzModel';
 import { toast } from '@/store/toastStore';
 import { toArabicDigits } from '@/utils/arabicFormat';
 
@@ -69,7 +76,14 @@ export function QuranPage() {
           <StatsShortcut to="/stats/quran" label="إحصاءات القرآن" />
         </div>
       </header>
-      {code ? <Linked code={code} /> : <LinkCard />}
+      {code ? (
+        <Linked code={code} />
+      ) : (
+        <>
+          <LinkCard />
+          <GroupsHomeCard khatma />
+        </>
+      )}
     </div>
   );
 }
@@ -173,6 +187,7 @@ function Linked({ code }: { code: string }) {
   const khatmas = useMushafiStore((s) => s.khatmas);
   const marks = useMushafiStore((s) => s.marks);
   const tops = useMushafiStore((s) => s.tops);
+  const sessions = useMushafiStore((s) => s.sessions);
   const setCode = useMushafiStore((s) => s.setCode);
   const fallback = useSettingsStore((s) => s.quranDailyTarget);
   const legacyWird = useQuranStore((s) => s.wird);
@@ -185,6 +200,17 @@ function Linked({ code }: { code: string }) {
     [days, khatmas, marks, today, fallback, legacyWird],
   );
   const types = useMemo(() => quranTypeStats(days, khatmas, marks, today, tops), [days, khatmas, marks, today, tops]);
+  const ses = useMemo(() => sessionStats(sessions), [sessions]);
+  // Sessions' pages per day in the type they belong to (reading → تلاوة, review → مراجعة) — beyond the khatmas'.
+  const sesDays = useMemo(() => {
+    const out = Object.fromEntries(QURAN_TYPE_IDS.map((ty) => [ty, {}])) as Record<QuranType, Record<string, number>>;
+    for (const x of ses.items) {
+      const c = sessionCredit(x, types);
+      for (const [ty, n] of [['tilawa', c.tilawa], ['listen', c.listen], ['hifz', c.review + c.hifz]] as const)
+        if (n > 0) out[ty][x.day] = (out[ty][x.day] ?? 0) + n;
+    }
+    return out;
+  }, [ses, types]);
   const all = useMemo(
     () =>
       khatmas
@@ -195,22 +221,25 @@ function Linked({ code }: { code: string }) {
   const week = useMemo(() => {
     const keys = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), 'yyyy-MM-dd'));
     const byType = Object.fromEntries(
-      QURAN_TYPE_IDS.map((ty) => [ty, keys.reduce((n, k) => n + (types[ty].days[k] ?? 0), 0)]),
+      QURAN_TYPE_IDS.map((ty) => [ty, Math.round(keys.reduce((n, k) => n + (types[ty].days[k] ?? 0) + (sesDays[ty][k] ?? 0), 0))]),
     ) as Record<QuranType, number>;
     return { pages: keys.reduce((n, k) => n + (days[k]?.length ?? 0), 0), byType };
-  }, [days, types]);
+  }, [days, types, sesDays]);
   const streaks = useMemo(() => {
     const of = (keys: string[]) => computeStreakFromActiveDates(keys).current;
     return {
-      any: of(Object.keys(days).filter((k) => days[k].length > 0)),
-      byType: Object.fromEntries(QURAN_TYPE_IDS.map((ty) => [ty, of(Object.keys(types[ty].days))])) as Record<QuranType, number>,
+      any: of([...Object.keys(days).filter((k) => days[k].length > 0), ...ses.byDay.keys()]),
+      byType: Object.fromEntries(
+        QURAN_TYPE_IDS.map((ty) => [ty, of([...Object.keys(types[ty].days), ...Object.keys(sesDays[ty])])]),
+      ) as Record<QuranType, number>,
     };
-  }, [days, types]);
+  }, [days, types, ses, sesDays]);
 
   return (
     <>
       <TodayWird t={t} weekPages={week.pages} />
       <StreakStrip any={streaks.any} byType={streaks.byType} types={types} />
+      <GroupsHomeCard khatma />
       <TodayChallenges only={['quran_wird_days', 'day_quran_share']} />
 
       <section className="flex flex-col gap-3">
@@ -234,6 +263,8 @@ function Linked({ code }: { code: string }) {
           all.map((s) => <KhatmaRow key={s.id} s={s} />)
         )}
       </section>
+
+      <SessionsSection ses={ses} />
 
       <BadgeCategoryStrip categories={['quran']} />
 
@@ -270,6 +301,125 @@ function Linked({ code }: { code: string }) {
         onCancel={() => setUnlink(false)}
       />
     </>
+  );
+}
+
+const SESSION_META: Record<SessionType, { label: string; Icon: LucideIcon }> = {
+  tilawa: { label: 'تلاوة', Icon: BookOpen },
+  listen: { label: 'استماع', Icon: Headphones },
+  hifz: { label: 'حفظ', Icon: Sprout },
+  review: { label: 'مراجعة', Icon: Repeat },
+};
+
+const isHeld = (t: SessionType) => t === 'hifz' || t === 'review';
+
+/** The latest five, newest first. */
+function SessionList({ items }: { items: SessionItem[] }) {
+  return (
+    <Card className="p-1.5">
+      <ul className="divide-y divide-black/[0.04] dark:divide-white/[0.06]">
+        {items.slice(-5).reverse().map((x) => {
+          const { label, Icon } = SESSION_META[x.ty];
+          const when = new Date(x.s).toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+          return (
+            <li key={x.id} className="flex items-center gap-3 px-2.5 py-2.5">
+              <span className="size-8 rounded-lg bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light inline-flex items-center justify-center shrink-0" aria-hidden>
+                <Icon size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13.5px] font-semibold text-text-primary dark:text-text-on-dark truncate">
+                  {label} · {rangeTxt(x.a, x.z)}
+                </span>
+                <span className="block text-[11.5px] text-text-muted">
+                  {when}
+                  {x.minutes >= 1 ? ` · ${ar(Math.round(x.minutes))} د` : ''} · {ar(x.z - x.a + 1)} آية{x.m ? ' · يدوياً' : ''}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+/**
+ * مصحفي's «جلسة», two apart (owner 2026-11-20): reading and listening from any place here;
+ * memorizing and reviewing in their own section, «الحفظ والمراجعة» (HifzPage).
+ */
+function SessionsSection({ ses }: { ses: SessionStats }) {
+  const read = ses.items.filter((x) => !isHeld(x.ty));
+  return (
+    <>
+      <section className="flex flex-col gap-3">
+        <SectionTitle title="جلسات التلاوة والاستماع" subtitle="من «جلسة» في مصحفي: من أي موضع، بلا ختمة" />
+        {read.length ? (
+          <SessionList items={read} />
+        ) : (
+          <Card className="p-4">
+            <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
+              في مصحفي اضغط «جلسة» (⏱)، واختر تلاوة أو استماعاً، وابدأ من أي آية. ما تقرؤه يصل هنا ويُحتسب في نقاطك وأوسمتك، والكهف يوم الجمعة
+              يُعلَّم وحده.
+            </p>
+          </Card>
+        )}
+      </section>
+      <HifzEntry />
+    </>
+  );
+}
+
+/** «الحفظ والمراجعة» at a glance — what you hold and today's review — opening its page. */
+function HifzEntry() {
+  const sessions = useMushafiStore((s) => s.sessions);
+  const cycle = useSettingsStore((s) => s.hifzCycle);
+  const m = hifzModel(sessions, Date.now(), cycle);
+  const t = m.today;
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle title="الحفظ والمراجعة" subtitle="محفوظك، ومراجعته يوماً بيوم" />
+      <Link
+        to="/hifz"
+        className="block rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
+        aria-label={`الحفظ والمراجعة: ${m.held ? `محفوظك ${pagesTxt(m.held)}` : 'ابدأ متابعة حفظك'}`}
+      >
+        <Card pressable className="p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="size-10 rounded-xl bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light inline-flex items-center justify-center shrink-0" aria-hidden>
+              {m.held ? <Brain size={20} /> : <Sprout size={20} />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] text-text-muted">{m.held ? 'محفوظك' : 'ابدأ متابعة حفظك'}</p>
+              <p className="text-[17px] font-bold text-text-primary dark:text-text-on-dark truncate">
+                {m.held ? pagesTxt(m.held) : 'سجّل ما تحفظه وما تراجعه'}
+              </p>
+            </div>
+            {m.held ? (
+              <span className="shrink-0 text-[13px] font-counter tabular-nums text-teal dark:text-teal-light">
+                {ar(Math.floor((m.held / 604) * 100))}٪
+              </span>
+            ) : null}
+            <ChevronLeft size={18} className="shrink-0 text-text-muted" aria-hidden />
+          </div>
+          {m.held ? (
+            <>
+              <span className="h-1.5 rounded-full bg-teal/10 overflow-hidden" aria-hidden>
+                <span className="block h-full rounded-full bg-[image:var(--gradient-teal)]" style={{ width: `${(m.held / 604) * 100}%` }} />
+              </span>
+              <p className="flex items-center gap-1.5 text-[12.5px] text-text-secondary dark:text-text-on-dark/80">
+                {t.left ? <Repeat size={14} className="text-gold-dark dark:text-gold-light" aria-hidden /> : <Check size={14} className="text-teal" aria-hidden />}
+                {t.left ? `مراجعة اليوم: بقي ${pagesTxt(t.left)}` : t.done ? 'أتممت مراجعة اليوم' : 'لا مراجعة عليك اليوم'}
+                {t.late ? <span className="text-danger"> · {pagesTxt(t.late)} متأخرة</span> : null}
+              </p>
+            </>
+          ) : (
+            <p className="text-[12.5px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty">
+              مراجعة كل يوم بالقريب والبعيد، وما تحفظه بعد، وخريطة محفوظك في المصحف.
+            </p>
+          )}
+        </Card>
+      </Link>
+    </section>
   );
 }
 
@@ -440,7 +590,7 @@ function StreakStrip({ any, byType, types }: { any: number; byType: Record<Quran
 function TypeCard({ stats, week, onOpen }: { stats: TypeStats; week: number; onOpen: () => void }) {
   const meta = QURAN_TYPES[stats.type];
   const run = stats.running[0];
-  const none = !run && stats.finished === 0;
+  const none = !run && stats.finished === 0 && week === 0;
   const pct = run ? Math.floor((run.done / run.total) * 100) : 0;
   return (
     <button
@@ -479,6 +629,12 @@ function TypeCard({ stats, week, onOpen }: { stats: TypeStats; week: number; onO
             ختمت {khatmasTxt(stats.finished)}
           </span>
           <span className="text-[11px] text-text-muted text-pretty">ابدأ ختمة جديدة ليبقى لك منها نصيب</span>
+        </>
+      ) : week > 0 ? (
+        // No khatma of it, but sessions in مصحفي this week (owner: review has no khatma)
+        <>
+          <span className="text-[12px] font-semibold text-teal dark:text-teal-light">هذا الأسبوع {ar(week)} ص</span>
+          <span className="mt-auto text-[11px] text-text-muted text-pretty">من جلساتك في مصحفي</span>
         </>
       ) : (
         <>

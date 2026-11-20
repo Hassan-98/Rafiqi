@@ -14,6 +14,9 @@ import { buildBadgeModel, computeBadgeMetrics, doorStandings, progressOf, type B
 import { fromHijri, toHijri } from '@/services/HijriService';
 import { eachPrayerStreak, type PrayerDayLog } from '@/store/prayerLogStore';
 import { computeStreakFromActiveDates } from '@/services/statsService';
+import type { Person, SilatEntry } from '@/store/silatModel';
+import type { ProgramRun } from '@/store/programsModel';
+import { templateById } from '@/data/programsCatalog';
 
 // ── catalog ────────────────────────────────────────────────────────────────
 const ids = BADGES.map((b) => b.id);
@@ -365,8 +368,21 @@ const v = (s: BadgeSnapshot, m: BadgeMetric) => computeBadgeMetrics(s).value[m];
     { id: 'b', m: 'r2', n: 'سماعي', at: 61, s: ago(1), d: 10, b: 40, ty: 'listen', t: 1 },
     { id: 'c', m: '', n: 'تفسيري', at: 604, rd: 604, s: ago(90), f: ago(10), d: 60, b: 0, ty: 'tafsir', t: 1 },
   ];
+  // Sessions: a listening one beyond the khatmas, a memorized الفاتحة, الكهف on a Friday not ticked in محاسبة الجمعة.
+  const fri = (() => { let d = new Date(); while (d.getDay() !== 5) d = addDays(d, -1); return d; })();
+  const at = (d: Date, h: number) => new Date(format(d, 'yyyy-MM-dd') + `T${String(h).padStart(2, '0')}:00:00`).getTime();
+  s.mushafi.sessions = [
+    { id: 's1', ty: 'listen', a: 7, z: 11, s: at(fri, 9), e: at(fri, 10), t: 1 }, // page 2, whole
+    { id: 's2', ty: 'hifz', a: 0, z: 6, s: at(fri, 11), e: at(fri, 12), t: 1 },
+    { id: 's3', ty: 'tilawa', a: 2140, z: 2249, s: at(fri, 13), e: at(fri, 14), t: 1 },
+  ];
   const m = computeBadgeMetrics(s);
-  assert.equal(m.value.listen_pages, 20);
+  assert.equal(m.value.memorized_pages, 1);
+  assert.equal(m.value.memorized_juz, 0);
+  assert.equal(m.value.friday_kahf, 1);
+  delete s.mushafi.sessions;
+  assert.equal(computeBadgeMetrics(s).value.listen_pages, 20);
+  assert.equal(m.value.listen_pages, 21, 'a session page beyond the khatmas');
   assert.equal(m.value.listen_streak, 2);
   assert.equal(m.value.tafsir_khatmat, 1);
   assert.equal(m.value.tafsir_pages, 604);
@@ -436,4 +452,191 @@ const v = (s: BadgeSnapshot, m: BadgeMetric) => computeBadgeMetrics(s).value[m];
   assert.equal(eachRawatibStreak(s.prayerLog, {}, false, NOW).find((c) => c.prayer === 'dhuhr' && c.type === 'sunnahBefore')!.current, 2, 'a woman’s Friday has a قبلية');
 }
 
+// ── The 2026-11-17 chapters: صلة الرحم، برامج التدرّج، القضاء، محاسبة الجمعة، المجموعات ──
+const has = (s: BadgeSnapshot, id: string) => {
+  const x = BADGES.find((b) => b.id === id)!;
+  return progressOf(x, computeBadgeMetrics(s)).current >= x.target;
+};
+
+// صلة الرحم: contacts with kin and parents (not friends, not du'a), du'a days for a parent,
+// visits, neighbours reached, a repaired estrangement, and weeks of everyone reached on time.
+{
+  let seq = 0;
+  const person = (id: string, relation: string, everyDays: number, extra: Partial<Person> = {}): Person => ({
+    id, name: id, relation, everyDays, createdAt: at(ago(60), 8), ...extra,
+  });
+  const entry = (personId: string, type: SilatEntry['type'], day: string): SilatEntry => ({ id: `e${++seq}`, personId, type, day, at: at(day, 10) });
+  const s = blank();
+  const bro = person('bro', 'brother', 7);
+  const friend = person('fr', 'friend', 14);
+  const mom = person('mom', 'mother', 1);
+  s.silat = { people: [bro, friend, mom], entries: [] };
+  for (let i = 1; i <= 9; i++) s.silat.entries.push(entry('bro', 'call', ago(i)));
+  for (let i = 1; i <= 5; i++) s.silat.entries.push(entry('fr', 'visit', ago(i)));
+  assert.equal(v(s, 'silat_kin'), 9, 'a friend is not kin');
+  assert.ok(!has(s, 'silat_kin_10'));
+  s.silat.entries.push(entry('bro', 'dua', ago(1)));
+  assert.equal(v(s, 'silat_kin'), 9, "du'a is a deed, not a contact");
+  s.silat.entries.push(entry('mom', 'visit', ago(2)));
+  assert.ok(has(s, 'silat_kin_10'));
+  assert.equal(v(s, 'silat_visits'), 6);
+  // Du'a for a parent: distinct days (two on one day are one); du'a for a brother is not.
+  for (let i = 1; i <= 6; i++) s.silat.entries.push(entry('mom', 'dua', ago(i)));
+  s.silat.entries.push(entry('mom', 'dua', ago(1)));
+  assert.equal(v(s, 'silat_parent_dua'), 6);
+  assert.ok(!has(s, 'parent_dua_7'));
+  s.silat.entries.push(entry('mom', 'dua', ago(7)));
+  assert.ok(has(s, 'parent_dua_7'));
+  // Neighbours: reached by a contact that counts (du'a doesn't).
+  const nbs = ['n1', 'n2', 'n3'].map((id) => person(id, 'neighbor', 14));
+  s.silat.people.push(...nbs);
+  s.silat.entries.push(entry('n1', 'gift', ago(3)), entry('n2', 'help', ago(3)), entry('n3', 'dua', ago(3)));
+  assert.equal(v(s, 'silat_neighbors'), 2);
+  s.silat.entries.push(entry('n3', 'message', ago(2)));
+  assert.ok(has(s, 'neighbors_3'));
+  // «الواصل الحق»: a contact AFTER the repair began.
+  const cousin = person('cousin', 'cousin', 30, { repair: { since: at(ago(5), 9) } });
+  s.silat.people.push(cousin);
+  s.silat.entries.push(entry('cousin', 'call', ago(8)));
+  assert.equal(v(s, 'silat_reconciled'), 0, 'a call before the repair is not a reconciliation');
+  s.silat.entries.push(entry('cousin', 'call', ago(4)));
+  assert.ok(has(s, 'reconcile_1'));
+  // «على العهد»: a mother reached every day for weeks; one missed day breaks the chain.
+  const w = blank();
+  const mother = person('m', 'mother', 1, { createdAt: at(ago(40), 8) });
+  w.silat = { people: [mother], entries: [] };
+  for (let i = 0; i <= 40; i++) w.silat.entries.push(entry('m', 'call', ago(i)));
+  assert.ok(v(w, 'silat_weeks') >= 4);
+  assert.ok(has(w, 'silat_weeks_4'));
+  w.silat.entries = w.silat.entries.filter((e) => e.day !== ago(10)); // Thursday, two weeks back
+  assert.equal(v(w, 'silat_weeks'), 2);
+  assert.ok(!has(w, 'silat_weeks_4'));
+  // No silat data at all → zeros.
+  assert.equal(v(blank(), 'silat_kin'), 0);
+}
+
+// برامج التدرّج: a template's badge unlocks on finishing it; locked progress shows the RUNNING attempt.
+{
+  assert.equal(templateById('takbeer40')!.steps.length, BADGES.find((b) => b.id === 'program_takbeer_40')!.target);
+  assert.equal(templateById('onTime40')!.steps.length, BADGES.find((b) => b.id === 'program_on_time_40')!.target);
+  assert.equal(templateById('qiyam30')!.steps.length, BADGES.find((b) => b.id === 'program_qiyam_30')!.target);
+  const okDays = (from: number, days: number[]) => Object.fromEntries(days.map((d) => [ago(from - d), { ok: true }]));
+  const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const prog = (p: Partial<ProgramRun>): ProgramRun => ({
+    id: 'r', startDay: ago(30), grace: 'strict', status: 'active', pauses: {}, checks: {}, remindersOn: false, createdAt: 0, ...p,
+  });
+  // Strict: 20 days, a miss (reset), then 9 more — best 20, but the badge shows the live 9.
+  const s = blank();
+  s.programs = [prog({ id: 'a', templateId: 'takbeer40', checks: okDays(30, [...range(0, 19), ...range(21, 29)]) })];
+  const m = computeBadgeMetrics(s);
+  assert.equal(m.value.program_takbeer, 9);
+  assert.equal(m.best.program_takbeer, 20);
+  const takbeer = BADGES.find((b) => b.id === 'program_takbeer_40')!;
+  assert.equal(progressOf(takbeer, m).current, 9);
+  assert.equal(m.value.programs_finished, 0);
+  // Forty clean days → finished: the takbeer badge, «المتدرّج», and no comeback.
+  s.programs = [prog({ id: 'b', templateId: 'takbeer40', startDay: ago(45), status: 'done', finishedOn: ago(6), checks: okDays(45, range(0, 39)) })];
+  assert.ok(has(s, 'program_takbeer_40'));
+  assert.ok(has(s, 'programs_1'));
+  assert.ok(!has(s, 'program_comeback_1'));
+  assert.ok(!has(s, 'program_qiyam_30'));
+  // Forgiving qiyam with a missed night, then finished → «سُلَّم القيام» + «من التوّابين».
+  s.programs.push(prog({ id: 'c', templateId: 'qiyam30', grace: 'forgiving', startDay: ago(40), checks: okDays(40, [...range(0, 9), ...range(11, 30)]) }));
+  const m2 = computeBadgeMetrics(s);
+  assert.equal(m2.value.programs_finished, 2);
+  assert.equal(m2.value.program_comebacks, 1);
+  assert.ok(has(s, 'program_qiyam_30'));
+  assert.ok(has(s, 'program_comeback_1'));
+  assert.ok(!has(s, 'programs_3'));
+  // Gender: «براءة من النار والنفاق» for men, «على أول وقتها» for women; neither before a gender is set.
+  assert.ok(badgesFor('male').some((b) => b.id === 'program_takbeer_40'));
+  assert.ok(!badgesFor('male').some((b) => b.id === 'program_on_time_40'));
+  assert.ok(badgesFor('female').some((b) => b.id === 'program_on_time_40'));
+  assert.ok(!badgesFor('female').some((b) => b.id === 'program_takbeer_40'));
+  assert.ok(!badgesFor(null).some((b) => b.audience));
+  const woman = blank();
+  woman.gender = 'female';
+  woman.programs = [prog({ id: 'd', templateId: 'onTime40', startDay: ago(45), checks: okDays(45, range(0, 39)) })];
+  assert.ok(has(woman, 'program_on_time_40'));
+  const model = buildBadgeModel(computeBadgeMetrics(woman), [], {}, 'female', NOW);
+  assert.ok(model.tracks.some((t) => t.metric === 'program_on_time') && !model.tracks.some((t) => t.metric === 'program_takbeer'));
+}
+
+// قضاء ما فات: made-up prayers (never above what is owed); a Ramadan's fasts made up before the
+// next Ramadan. Private: every qada badge is a secret — never suggested, found only by doing it.
+{
+  const s = blank();
+  s.qada = { debts: [{ id: 'p', kind: 'prayer', counts: { fajr: 3, isha: 1 }, source: 'manual', at: 0 }], paid: {} };
+  assert.ok(!has(s, 'qada_1'));
+  s.qada.paid = { [ago(2)]: { fajr: 5 }, [ago(1)]: { asr: 2 } };
+  assert.equal(v(s, 'qada_prayers'), 3, 'capped at what is owed, per prayer');
+  assert.ok(has(s, 'qada_1'));
+  assert.ok(!has(s, 'qada_100'));
+  assert.ok(BADGES.filter((b) => b.metric.startsWith('qada_')).every((b) => b.hidden && b.hint));
+  // The oldest Ramadan settles first: 1446's day (due 1 Ramadan 1447) paid late, 1447's on time.
+  const fast = (year: number, count: number) => ({ id: `f${year}`, kind: 'fast' as const, count, reason: 'illness' as const, year, source: 'manual' as const, at: 0 });
+  const r = blank();
+  r.qada = { debts: [fast(1446, 1)], paid: { '2026-10-01': { fast: 1 } } };
+  assert.equal(v(r, 'qada_ramadan'), 0, '1446 made up after Ramadan 1447 began');
+  assert.ok(!has(r, 'qada_ramadan_1'));
+  r.qada.debts.push(fast(1447, 1));
+  r.qada.paid['2026-10-02'] = { fast: 1 };
+  assert.equal(v(r, 'qada_ramadan'), 1);
+  r.qada.debts.push(fast(1447, 1)); // one more day owed for 1447, not yet made up
+  assert.equal(v(r, 'qada_ramadan'), 0);
+  // Discreet: the qada tracks stay secret (out of «القادم» and the door's next step) until found.
+  const model = buildBadgeModel(computeBadgeMetrics(blank()), [], {}, 'male', NOW);
+  assert.ok(model.tracks.filter((t) => t.metric.startsWith('qada_')).every((t) => t.secret));
+  const found = buildBadgeModel(computeBadgeMetrics(s), ['qada_1'], {}, 'male', NOW);
+  assert.ok(!found.nearest.some((x) => x.badge.metric.startsWith('qada_')));
+  assert.ok(!doorStandings(found).doors.some((d) => d.step?.badge.metric.startsWith('qada_')));
+}
+
+// محاسبة الجمعة: consecutive reviewed weeks (keyed by Friday), resolves kept, and الكهف on Fridays.
+{
+  const s = blank(); // NOW is Sunday 2026-11-08: this week (ending 11-13) is still open
+  const done = { doneAt: at('2026-11-06', 18) };
+  s.fridayReview = { reviews: { '2026-11-06': done, '2026-10-30': done, '2026-10-23': done, '2026-10-16': done } };
+  assert.ok(has(s, 'muhasaba_4'));
+  delete s.fridayReview.reviews['2026-10-30'];
+  const m = computeBadgeMetrics(s);
+  assert.equal(m.value.muhasaba_streak, 1);
+  assert.equal(m.best.muhasaba_streak, 2);
+  assert.ok(!has(s, 'muhasaba_4'));
+  s.fridayReview.reviews = { a: { kept: 'yes' }, b: { kept: 'yes' }, c: { kept: 'partly' }, d: { kept: 'no' } };
+  assert.equal(v(s, 'muhasaba_kept'), 2);
+  assert.ok(!has(s, 'kept_3'));
+  s.fridayReview.reviews.e = { kept: 'yes', doneAt: 1 };
+  assert.ok(has(s, 'kept_3'));
+  s.fridayReview.sunan = { '2026-11-06': ['kahf', 'salawat'], '2026-10-30': ['kahf'], '2026-10-23': ['salawat'], '2026-10-16': ['kahf'] };
+  assert.equal(v(s, 'friday_kahf'), 3);
+  assert.ok(!has(s, 'kahf_4'));
+  s.fridayReview.sunan['2026-10-09'] = ['kahf', 'hour'];
+  assert.ok(has(s, 'kahf_4'));
+}
+
+// المجموعات: completed group khatmas the user read in.
+{
+  const s = blank();
+  assert.ok(!has(s, 'group_khatma_1'));
+  s.groupKhatmas = { [ago(3)]: 1, [ago(1)]: 2 };
+  assert.equal(v(s, 'group_khatmat'), 3);
+  assert.ok(has(s, 'group_khatma_1'));
+  assert.ok(!has(s, 'group_khatma_5'));
+}
+
+// The new doors are optional: never «waiting» for someone who never opened them; activity counts.
+{
+  const fresh = doorStandings(buildBadgeModel(computeBadgeMetrics(blank()), [], {}, 'male', NOW));
+  assert.ok(!fresh.weak.some((d) => d.id === 'silat' || d.id === 'tazkiya'));
+  const s = blank();
+  s.silat = { people: [{ id: 'm', name: 'm', relation: 'mother', everyDays: 1, createdAt: at(ago(60), 8) }], entries: [] };
+  for (let i = 0; i < 28; i++) s.silat.entries.push({ id: `x${i}`, personId: 'm', type: 'call', day: ago(i), at: at(ago(i), 9) });
+  assert.equal(computeBadgeMetrics(s).activity!.silat, 1);
+  const strong = doorStandings(buildBadgeModel(computeBadgeMetrics(s), [], {}, 'male', NOW)).strong;
+  assert.equal(strong[0].id, 'silat');
+}
+
+assert.equal(BADGES.length, 429, 'catalog size (379 + 40 for the 2026-11-17 chapters + 10 for مصحفي sessions 2026-11-20)');
+assert.equal(TRACKS.length, 139);
 console.log(`badges: ok (${BADGES.length} badges, ${TRACKS.length} tracks)`);

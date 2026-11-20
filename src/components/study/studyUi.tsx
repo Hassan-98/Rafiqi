@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
@@ -139,14 +139,37 @@ export function Segmented<T extends string>({
   onChange,
   options,
   className = '',
+  scroll = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: ReactNode }[];
   className?: string;
+  /** Labels never wrap; the strip scrolls sideways when they don't fit (hub tabs on a 360px phone). */
+  scroll?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Keep the selected tab in view (a deep link to the last tab) — sideways only, never the page.
+  // Observed, not measured once: the app font swaps in after a cold start and widens the labels.
+  useEffect(() => {
+    const strip = ref.current;
+    const btn = strip?.querySelector('[aria-selected="true"]');
+    if (!scroll || !strip || !btn) return;
+    const ro = new ResizeObserver(() => {
+      const s = strip.getBoundingClientRect();
+      const b = btn.getBoundingClientRect();
+      if (b.left < s.left) strip.scrollBy({ left: b.left - s.left - 8 });
+      else if (b.right > s.right) strip.scrollBy({ left: b.right - s.right + 8 });
+    });
+    ro.observe(btn);
+    return () => ro.disconnect();
+  }, [scroll, value]);
   return (
-    <div role="tablist" className={['flex rounded-2xl bg-cream-dark/60 dark:bg-dark-surface p-1', className].join(' ')}>
+    <div
+      ref={ref}
+      role="tablist"
+      className={['flex rounded-2xl bg-cream-dark/60 dark:bg-dark-surface p-1', scroll ? 'overflow-x-auto no-scrollbar' : '', className].join(' ')}
+    >
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -157,7 +180,8 @@ export function Segmented<T extends string>({
             aria-selected={active}
             onClick={() => onChange(o.value)}
             className={[
-              'flex-1 min-h-10 rounded-xl text-sm font-semibold transition-[background-color,color,box-shadow] duration-200 ease-out-soft',
+              'flex-1 rounded-xl text-sm font-semibold transition-[background-color,color,box-shadow] duration-200 ease-out-soft',
+              scroll ? 'min-h-11 px-2.5 whitespace-nowrap inline-flex items-center justify-center gap-1.5' : 'min-h-10',
               active
                 ? 'bg-white dark:bg-dark-card shadow-[var(--shadow-xs)] text-teal dark:text-teal-light'
                 : 'text-text-secondary dark:text-text-on-dark/70',

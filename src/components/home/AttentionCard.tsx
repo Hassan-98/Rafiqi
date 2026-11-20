@@ -1,13 +1,36 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { format } from 'date-fns';
-import { BedDouble, BellRing, BookOpen, CalendarHeart, Check, ChevronLeft, HandCoins, House, Moon, MoonStar, Sunrise, Sunset, SunMedium, Target } from 'lucide-react';
+import {
+  BedDouble,
+  BellRing,
+  BookOpen,
+  CalendarClock,
+  CalendarHeart,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  HandCoins,
+  House,
+  Lightbulb,
+  ListChecks,
+  Moon,
+  MoonStar,
+  Sunrise,
+  Sunset,
+  SunMedium,
+  Target,
+  Users,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { motion } from '@/lib/motion';
 import { Mosque } from '@/components/icons/Mosque';
 import { prayerName, rakaat as rakaatAr } from '@/components/modules/PrayerDaySheet';
-import { dayAttention, leftLabel, type AttentionAction, type AttentionIcon, type AttentionItem, type AttentionLevel } from '@/services/dayAttention';
+import { dayAttention, leftLabel, presentAttention, type AttentionAction, type AttentionIcon, type AttentionItem, type AttentionLevel } from '@/services/dayAttention';
 import { collectSnapshot } from '@/services/insightsService';
+import { prayerTimesOf } from '@/services/smartNotifications';
+import { useCalendarPrefs } from '@/services/calendarEvents';
+import { toArabicDigits } from '@/services/statsService';
 import { hapticsService } from '@/services/HapticsService';
 import { usePrayerLogStore, lastDuhaRakaat } from '@/store/prayerLogStore';
 import { useQiyamStore } from '@/store/qiyamStore';
@@ -24,6 +47,8 @@ import { useHouseStore } from '@/store/houseStore';
 import { choreOf, type Chore } from '@/data/houseChores';
 import { KindSheet, logChore } from '@/components/study/HouseView';
 import type { PrayerTimesResult } from '@/types';
+// Features register their attention sources here (side effects).
+import '@/services/attention/plugins';
 
 const ICON: Record<AttentionIcon, LucideIcon> = {
   prayer: Mosque as unknown as LucideIcon,
@@ -39,9 +64,12 @@ const ICON: Record<AttentionIcon, LucideIcon> = {
   sadaqah: HandCoins,
   friday: CalendarHeart,
   house: House,
+  season: CalendarClock,
+  people: Users,
+  task: ListChecks,
 };
 
-/** missed = it has passed, closing = it's running out, suggest = an open door. */
+/** missed = it has passed, closing = it's running out, suggest = an open door, prep = tomorrow. */
 const TONE: Record<AttentionLevel, { box: string; icon: string; kicker: string; chip: string }> = {
   missed: {
     box: 'ring-danger/25 bg-danger/[0.05] dark:bg-danger/[0.09]',
@@ -60,6 +88,12 @@ const TONE: Record<AttentionLevel, { box: string; icon: string; kicker: string; 
     icon: 'bg-teal/10 text-teal dark:bg-teal/15 dark:text-teal-light',
     kicker: 'text-teal dark:text-teal-light',
     chip: 'bg-teal/10 text-teal dark:bg-teal/15 dark:text-teal-light ring-1 ring-teal/25',
+  },
+  prep: {
+    box: 'ring-text-muted/15 bg-cream-dark/40 dark:bg-dark-surface/70',
+    icon: 'bg-teal/10 text-teal-dark dark:bg-teal/15 dark:text-teal-light',
+    kicker: 'text-teal-dark dark:text-teal-light',
+    chip: 'bg-teal/10 text-teal-dark dark:bg-teal/15 dark:text-teal-light ring-1 ring-teal/25',
   },
 };
 
@@ -87,80 +121,141 @@ function act(a: AttentionAction, male: boolean, only?: number) {
     const witr = last?.witr ?? true;
     q.logNight({ rakaat, witr });
     success('سُجّل قيام الليلة، تقبّل الله', `${rakaatAr(rakaat)}${witr ? ' + الوتر' : ''} — عدّلها من صفحة القيام`);
+  } else if (a.kind === 'intent') {
+    useAttentionStore.getState().setFastIntent(a.dateKey);
+    success('نويتَ صيام الغد، تقبّل الله', 'نذكّرك بالسحور قبل الفجر بإذن الله');
+  } else if (a.kind === 'run') {
+    a.run();
   }
 }
 
 const chipBase = 'min-h-9 px-3 rounded-full inline-flex items-center gap-1 text-[12px] font-bold transition-transform active:scale-[0.97]';
 const textBtn = 'min-h-9 px-2 text-[11.5px] font-semibold text-text-muted hover:text-text-secondary dark:hover:text-text-on-dark/80';
 
-function Row({ item, male }: { item: AttentionItem; male: boolean }) {
+function Chips({ item, male, tone, onActed }: { item: AttentionItem; male: boolean; tone: (typeof TONE)[AttentionLevel]; onActed: () => void }) {
+  const a = item.action;
+  const [pick, setPick] = useState<Chore | null>(null);
+  const done = (f: () => void) => () => {
+    f();
+    onActed();
+  };
+  if (!a) return null;
+  const chip = [chipBase, tone.chip].join(' ');
+  return (
+    <>
+      {a.kind === 'prayers'
+        ? a.prayers.map((p, i) => {
+            const name = prayerName(p, a.dateKey, male);
+            return (
+              <button key={p} type="button" onClick={done(() => act(a, male, i))} aria-label={`سجّل صلاة ${name}`} className={chip}>
+                <Check size={13} strokeWidth={2.8} aria-hidden /> {name}
+              </button>
+            );
+          })
+        : null}
+      {a.kind === 'prayers' && a.prayers.length >= 3 ? (
+        <button type="button" onClick={done(() => act(a, male))} className={chip}>
+          صلّيتها كلها
+        </button>
+      ) : null}
+      {a.kind === 'chores'
+        ? a.chores.map((id) => {
+            const c = choreOf(id);
+            return c ? (
+              <button key={id} type="button" onClick={c.kinds ? () => setPick(c) : done(() => logChore(id))} className={chip}>
+                <Check size={13} strokeWidth={2.8} aria-hidden /> {c.label}
+              </button>
+            ) : null;
+          })
+        : null}
+      {a.kind !== 'prayers' && a.kind !== 'chores' ? (
+        <button type="button" onClick={done(() => act(a, male))} className={chip}>
+          <Check size={13} strokeWidth={2.8} aria-hidden />{' '}
+          {a.kind === 'qiyam' ? 'قمتُ الليلة' : a.kind === 'intent' ? 'سأصومه بإذن الله' : a.kind === 'run' ? a.label : 'صلّيتُها'}
+        </button>
+      ) : null}
+      {a.kind === 'chores' ? (
+        <KindSheet
+          chore={pick}
+          onClose={() => setPick(null)}
+          onPick={(kind, meal) => {
+            if (pick) logChore(pick.id, kind, meal);
+            setPick(null);
+            onActed();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** One item: `focus` is the «الآن» one (larger, its «لماذا؟» open); the rest are compact. */
+function Row({ item, male, focus = false, onActed }: { item: AttentionItem; male: boolean; focus?: boolean; onActed: () => void }) {
   const navigate = useNavigate();
   const dismiss = useAttentionStore((s) => s.dismiss);
   const mute = useAttentionStore((s) => s.mute);
+  const [whyOpen, setWhyOpen] = useState(false);
+  const whyId = useId();
   const tone = TONE[item.level];
-  const Icon = ICON[item.icon];
-  const a = item.action;
+  const Icon = ICON[item.icon] ?? CalendarHeart;
   const left = item.deadline ? item.deadline.getTime() - Date.now() : null;
   const today = format(new Date(), 'yyyy-MM-dd');
-  const [pick, setPick] = useState<Chore | null>(null);
+  const showWhy = !!item.why && (focus || whyOpen);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22 }}
-      className={['rounded-[var(--radius-card)] ring-1 p-3 flex gap-3', tone.box].join(' ')}
+      className={['rounded-[var(--radius-card)] ring-1 flex', focus ? 'p-3.5 gap-3 shadow-sm' : 'p-2.5 gap-2.5', tone.box].join(' ')}
     >
-      <span className={['w-10 h-10 rounded-xl inline-flex items-center justify-center shrink-0', tone.icon].join(' ')}>
-        <Icon size={18} strokeWidth={1.9} />
+      <span className={['rounded-xl inline-flex items-center justify-center shrink-0', focus ? 'w-11 h-11' : 'w-9 h-9', tone.icon].join(' ')}>
+        <Icon size={focus ? 20 : 16} strokeWidth={1.9} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2">
-          <span className={['text-[11px] font-bold', tone.kicker].join(' ')}>{item.kicker}</span>
-          {left != null && left > 0 ? (
+        <p className="flex items-center gap-1.5 min-w-0">
+          {focus ? <span className={['shrink-0 rounded-full px-2 py-px text-[10.5px] font-bold', tone.chip].join(' ')}>الآن</span> : null}
+          <span className={['min-w-0 truncate text-[11px] font-bold', tone.kicker].join(' ')}>{item.kicker}</span>
+          {!focus && left != null && left > 0 ? (
             <span className="ms-auto shrink-0 text-[10.5px] font-counter font-semibold tabular-nums text-text-muted">بقي {leftLabel(left)}</span>
           ) : null}
         </p>
         <button type="button" onClick={() => navigate(item.to)} className="mt-0.5 w-full text-start flex items-start gap-1">
           <span className="min-w-0 flex-1">
-            <span className="block text-[14.5px] font-bold leading-snug text-text-primary dark:text-text-on-dark">{item.title}</span>
-            <span className="mt-0.5 block text-[12px] leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty line-clamp-2">{item.body}</span>
+            <span className={['block font-bold leading-snug text-text-primary dark:text-text-on-dark [overflow-wrap:anywhere]', focus ? 'text-[15.5px]' : 'text-[13.5px]'].join(' ')}>
+              {item.title}
+            </span>
+            <span
+              className={[
+                // line-clamp sets its own display: no `block` here, or the clamp is lost.
+                'mt-0.5 leading-relaxed text-text-secondary dark:text-text-on-dark/75 text-pretty',
+                focus ? 'text-[12.5px] line-clamp-2' : 'text-[11.5px] line-clamp-1',
+              ].join(' ')}
+            >
+              {item.body}
+            </span>
           </span>
           <ChevronLeft size={15} className="mt-1 shrink-0 text-text-muted" aria-hidden />
         </button>
 
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {a?.kind === 'prayers'
-            ? a.prayers.map((p, i) => {
-                const name = prayerName(p, a.dateKey, male);
-                return (
-                  <button key={p} type="button" onClick={() => act(a, male, i)} aria-label={`سجّل صلاة ${name}`} className={[chipBase, tone.chip].join(' ')}>
-                    <Check size={13} strokeWidth={2.8} /> {name}
-                  </button>
-                );
-              })
-            : null}
-          {a?.kind === 'prayers' && a.prayers.length >= 3 ? (
-            <button type="button" onClick={() => act(a, male)} className={[chipBase, tone.chip].join(' ')}>
-              صلّيتها كلها
-            </button>
-          ) : null}
-          {a?.kind === 'chores'
-            ? a.chores.map((id) => {
-                const c = choreOf(id);
-                return c ? (
-                  <button key={id} type="button" onClick={() => (c.kinds ? setPick(c) : logChore(id))} className={[chipBase, tone.chip].join(' ')}>
-                    <Check size={13} strokeWidth={2.8} /> {c.label}
-                  </button>
-                ) : null;
-              })
-            : null}
-          {a && a.kind !== 'prayers' && a.kind !== 'chores' ? (
-            <button type="button" onClick={() => act(a, male)} className={[chipBase, tone.chip].join(' ')}>
-              <Check size={13} strokeWidth={2.8} /> {a.kind === 'qiyam' ? 'قمتُ الليلة' : 'صلّيتُها'}
-            </button>
-          ) : null}
+        {showWhy ? (
+          <p id={whyId} className="mt-1.5 flex items-start gap-1 text-[11px] leading-relaxed text-text-muted text-pretty">
+            <Lightbulb size={12} className="mt-0.5 shrink-0 text-gold-dark dark:text-gold-light" aria-hidden />
+            <span>
+              <span className="sr-only">لماذا؟ </span>
+              {item.why}
+            </span>
+          </p>
+        ) : null}
+
+        <div className={['flex flex-wrap items-center gap-1.5', focus ? 'mt-2.5' : 'mt-1.5'].join(' ')}>
+          <Chips item={item} male={male} tone={tone} onActed={onActed} />
           <span className="ms-auto inline-flex items-center">
+            {!focus && item.why ? (
+              <button type="button" onClick={() => setWhyOpen((v) => !v)} aria-expanded={whyOpen} aria-controls={whyId} className={textBtn}>
+                لماذا؟
+              </button>
+            ) : null}
             <button type="button" onClick={() => dismiss(item.id, today)} className={textBtn}>
               {item.habit === 'kahf' ? 'قرأتُها' : 'ليس الآن'}
             </button>
@@ -179,23 +274,21 @@ function Row({ item, male }: { item: AttentionItem; male: boolean }) {
           </span>
         </div>
       </div>
-      {a?.kind === 'chores' ? (
-        <KindSheet
-          chore={pick}
-          onClose={() => setPick(null)}
-          onPick={(kind, meal) => {
-            if (pick) logChore(pick.id, kind, meal);
-            setPick(null);
-          }}
-        />
-      ) : null}
     </motion.div>
   );
 }
 
+function GroupLabel({ children }: { children: string }) {
+  return <p className="px-1 pt-1 text-[11px] font-bold text-text-muted">{children}</p>;
+}
+
+/** Beyond the focus, this many rows show before «و٣ أخرى». */
+const VISIBLE = 3;
+const moreLabel = (n: number) => (n === 1 ? 'وواحدة أخرى' : n === 2 ? 'واثنتان أخريان' : `و${toArabicDigits(n)} أخرى`);
+
 /**
- * «يحتاج انتباهك» — what was missed, what is running out, and one sunnah the
- * user seldom does while its time is open (services/dayAttention.ts). Renders
+ * «يحتاج انتباهك» — ONE «الآن» focus, then «قبل أن يفوت» (today) and
+ * «استعدّ للغد», each with its «لماذا؟» (services/dayAttention.ts). Renders
  * nothing when all is well.
  */
 export function AttentionCard({ times }: { times: PrayerTimesResult | null }) {
@@ -218,6 +311,11 @@ export function AttentionCard({ times }: { times: PrayerTimesResult | null }) {
   const house = useHouseStore((s) => s.entries);
   const dismissed = useAttentionStore((s) => s.dismissed);
   const muted = useAttentionStore((s) => s.muted);
+  const fastIntent = useAttentionStore((s) => s.fastIntent);
+  const hijriOffset = useCalendarPrefs((s) => s.hijriOffset);
+  // A source's chip changes a store the card doesn't watch: refresh after any tap.
+  const [tick, setTick] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   // Home re-renders every second (the prayer countdown); the list follows the minute.
   const minute = Math.floor(Date.now() / 60_000);
 
@@ -229,29 +327,64 @@ export function AttentionCard({ times }: { times: PrayerTimesResult | null }) {
       snap: collectSnapshot(),
       now,
       times,
-      male,
+      timesOf: prayerTimesOf,
+      gender,
       quranOwe: q && (q.live.length || wird) ? q.owe : null,
       pagesToday: days[today] ?? [],
       muted,
       hidden: Object.keys(dismissed).filter((k) => dismissed[k] === today),
-      house: gender === 'female' ? house : undefined,
+      hijriOffset,
+      fastIntent,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the store slices are the change triggers; the engine reads a fresh snapshot
-  }, [minute, times, log, excused, duha, nights, events, dailyProgress, targets, sadaqah, linked, days, khatmas, marks, wird, fallback, gender, house, dismissed, muted]);
+  }, [minute, tick, times, log, excused, duha, nights, events, dailyProgress, targets, sadaqah, linked, days, khatmas, marks, wird, fallback, gender, house, dismissed, muted, fastIntent, hijriOffset]);
 
   if (items.length === 0) return null;
-  const urgent = items.filter((i) => i.level !== 'suggest').length;
+  const { focus, today, tomorrow } = presentAttention(items);
+  const rest = [...today, ...tomorrow];
+  const shown = expanded ? rest : rest.slice(0, VISIBLE);
+  const hiddenCount = rest.length - shown.length;
+  const shownToday = shown.filter((i) => i.level !== 'prep');
+  const shownTomorrow = shown.filter((i) => i.level === 'prep');
+  const refresh = () => setTick((n) => n + 1);
+  const urgent = focus && (focus.level === 'missed' || focus.level === 'closing');
+
   return (
     <section aria-label="يحتاج انتباهك" className="flex flex-col gap-2">
       {urgent ? (
         <p className="inline-flex items-center gap-1.5 px-1 text-[12px] font-bold text-text-secondary dark:text-text-on-dark/80">
-          <BellRing size={14} className="text-gold-dark dark:text-gold-light" />
+          <BellRing size={14} className="text-gold-dark dark:text-gold-light" aria-hidden />
           يحتاج انتباهك
         </p>
       ) : null}
-      {items.slice(0, 4).map((it) => (
-        <Row key={it.id} item={it} male={male} />
-      ))}
+      {focus ? <Row item={focus} male={male} focus onActed={refresh} /> : null}
+      {shownToday.length ? (
+        <>
+          <GroupLabel>قبل أن يفوت</GroupLabel>
+          {shownToday.map((it) => (
+            <Row key={it.id} item={it} male={male} onActed={refresh} />
+          ))}
+        </>
+      ) : null}
+      {shownTomorrow.length ? (
+        <>
+          <GroupLabel>استعدّ للغد</GroupLabel>
+          {shownTomorrow.map((it) => (
+            <Row key={it.id} item={it} male={male} onActed={refresh} />
+          ))}
+        </>
+      ) : null}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-expanded={false}
+          className="self-start min-h-9 px-2 inline-flex items-center gap-1 text-[12px] font-bold text-teal dark:text-teal-light"
+        >
+          {moreLabel(hiddenCount)}
+          <ChevronDown size={14} aria-hidden />
+        </button>
+      ) : null}
     </section>
   );
 }

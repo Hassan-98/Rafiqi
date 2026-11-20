@@ -1,115 +1,177 @@
-You are an expert full-stack developer and UI/UX designer specializing in building high-quality, production-ready Android WebView applications. Your primary technology stack is React, TypeScript, and Tailwind CSS, which allows the app to run in both a browser (for development) and inside an Android WebView (for production).
+<div dir="rtl" align="center">
 
-## Project Overview
+<img src="assets/icon-only.png" width="112" alt="شعار رفيقي" />
 
-You are building **MyZikr** — a personal Islamic worship companion app. The app helps me as a Muslim track, schedule, and build consistency in my daily acts of worship through an elegant, interactive experience with rich statistics and a smart notification system.
+# رَفِيقِي
 
-## Core Features
+**رفيقك اليومي في العبادة — يذكّرك في وقتك، ويتعلّم عاداتك، ويعينك على الثبات**
 
-### 1. Worship Tracker Modules
-The app tracks the following worship activities, each as a standalone configurable (find a public apis to help bring and show the data like Dhikr & Adhkar and prayer times and Quran pages) module:
-- **Daily Prayers (Salawat)**: Fajr, Dhuhr, Asr, Maghrib, Isha — with individual check-off and optional Sunnah prayers, find a public api to bring in prayers timing in based on my location.
-- **Dhikr & Adhkar**: Morning adhkar, evening adhkar, and post-prayer tasbihat — with tap-to-count interactive counters.
-- **Daily Quran Wird**: User sets a daily page/surah target; tracks completion with a progress ring.
-- **Qiyam al-Layl (Night Prayer)**: Separate tracking with a dedicated reminder.
-- **Fasting (Sawm)**: Track voluntary fasts (Mondays, Thursdays, Ayyam al-Bid, etc.).
-- **Duaa Journal**: A personal log for daily supplications.
-- **Custom Habits**: User can add any custom worship habit with a name, icon, and frequency.
+صلاتك وأذكارك وقرآنك وقيامك وصيامك، وأرحامك ومحاسبة نفسك — في تطبيق واحد عربيّ، هادئ، يعمل دون إنترنت.
 
-Each module is independently toggleable (user can hide/show modules they don't use).
+أندرويد · ويندوز · المتصفّح
 
-### 2. Smart Notification & Reminder System
-This is the most critical feature of the app. The system must support:
-- **Per-module reminders**: Each module has its own configurable reminder time (e.g., remind me of morning adhkar at 6:30 AM, night prayer at 11:00 PM).
-- **Prayer time-based triggers**: Prayers are reminded based on calculated local prayer times (using the user's GPS coordinates or manual city input), supporting multiple calculation methods (MWL, ISNA, Egyptian, Umm Al-Qura, etc.).
-- **Repeat & snooze**: Reminders support snooze (5, 10, 15 min) and repeat options.
-- **Android Native Bridge**: Since native push notifications require Android APIs, implement a JavaScript-to-Android bridge using `window.Android.scheduleNotification(json)`. Define a clean JS interface contract that the Android WebView host can implement. All notification scheduling logic should be encapsulated in a `NotificationService` class with a graceful fallback (no-op + console warning) when running in a browser during development.
-- **Notification payload structure**: Each notification must carry `{ id, title, body, triggerTime (ISO 8601), repeatInterval?, moduleId, deepLinkPath }`.
+<a href="https://github.com/Hassan-98/Rafiqi/releases/latest"><b>⬇ تحميل أحدث إصدار</b></a>
 
-### 3. Statistics & Analytics Dashboard
-- Daily completion rate (ring/gauge chart per module).
-- Weekly heatmap calendar (GitHub-style contribution grid) for each habit.
-- Monthly streak counters with longest-streak highlights.
-- Overall consistency score (0–100%) with motivational messages.
-- Charts must be smooth, animated, and rendered using a lightweight charting library (Recharts or Chart.js via CDN — no heavy bundle overhead).
+<br/>
 
-### 4. UI/UX Design System
-The interface must be:
-- **Responsive**: Optimized for mobile screens (360px–420px width) first, with graceful scaling to tablet and desktop for development.
-- **Modern & beautiful**: Use an Islamic-inspired design language — warm cream/sand backgrounds (`#F9F5EF`), deep teal (`#1A6B5A`) and gold (`#C9A84C`) as primary accent colors, soft shadows, and rounded corners.
-- **RTL-ready**: The layout must support both Arabic (RTL) (default view the application is in arabic) and English (LTR). Use CSS `dir` and logical properties (`margin-inline-start`, `padding-inline-end`) throughout.
-- **Smooth animations**: Page transitions, counter increments, and progress updates must be animated with `framer-motion` or CSS transitions. Never use jarring instant state changes.
-- **Dark mode**: Full dark mode support via Tailwind's `dark:` classes, stored in `localStorage` and synced with a toggle in settings.
-- **Accessible**: All interactive elements must have `aria-label`, correct focus rings, and sufficient color contrast.
+<img src="docs/screenshots/home.jpg" width="230" alt="الرئيسية" />
+<img src="docs/screenshots/attention.jpg" width="230" alt="يحتاج انتباهك" />
+<img src="docs/screenshots/home-dark.jpg" width="230" alt="الوضع الليلي" />
 
-## Technical Architecture
+</div>
 
-### Stack
-- **React 19 or latest** with functional components and hooks only (no class components).
-- **TypeScript** (strict mode) for all files.
-- **Tailwind CSS v4 or latest** with a custom theme extension for the Islamic color palette.
-- **React Router v7 or latest** for client-side routing (Hash router for WebView compatibility).
-- **Zustand** for global state management (user settings, daily progress, notification config).
-- **date-fns** for all date/time operations.
-- **adhan-js** library for accurate prayer time calculations.
-- **Recharts** for statistics charts.
-- **framer-motion** for animations.
+<div dir="rtl">
 
-### Project Structure
+## لماذا رفيقي؟
+
+- **يعرف وقتك:** مواقيت الصلاة بموقعك، وتذكير الإقامة لكل صلاة، وأذان كامل الشاشة.
+- **يتعلّم منك:** يلاحظ متى تقرأ أذكارك عادةً، وأيّ صلاة تفوتك في أيّ يوم، فيذكّرك في الوقت الأنسب — ويخفّف ما تتجاهله من التذكيرات بدل أن يُلحّ.
+- **يرى يومك كاملاً:** بطاقة «يحتاج انتباهك» تضع أمامك أهمّ ما بقي **الآن**، وما يوشك أن يفوت، وما تستعدّ له غداً — ومع كل بند سطر «لماذا؟».
+- **صادق في الحساب:** إحصاءات وأوسمة وترتيب مبنية على ما تسجّله أنت، ونقاط بحسب جهد العمل.
+- **خاصّ بك:** بياناتك على جهازك، والمزامنة اختيارية بحسابك، ولا يُرفع إلى الترتيب إلا مجموع نقاطك.
+
+---
+
+## المزايا
+
+### 🕌 الصلاة
+- مواقيت دقيقة بطرق الحساب المعتمدة، والأذان كاملَ الشاشة بأصوات حقيقية.
+- تسجيل الفروض والسنن الرواتب والضحى، و«في المسجد» للرجال و«على وقتها» للنساء، وأذكار ما بعد كل صلاة.
+- سلاسل لكل صلاة، وسؤال لطيف «هل صلّيت؟» قبل خروج الوقت.
+- **وضع الصلاة (أندرويد):** يصمت الهاتف تلقائياً عند الإقامة ثم يعود كما كان، والجمعة بمدة أطول، وبعد الصلاة «هل صلّيت؟» تسجّلها من الإشعار.
+
+### 📿 الأذكار
+- أذكار الصباح والمساء والنوم وما بعد الصلاة، بعدّاد باللمس أو بأزرار الصوت، ونسخة «مختصرة» لأيام الانشغال.
+- استماعٌ للأذكار بصوتٍ موثّق، ومكتبة أدعية حصن المسلم، والسبحة.
+
+### 📖 القرآن مع «مصحفي»
+- يرتبط بتطبيق «مصحفي»: وِردك اليومي وختماتك (تلاوة، استماع، تفسير، مراجعة) وصفحاتك تظهر هنا تلقائياً.
+
+### 🌙 الوِرد والقيام والصيام
+- أوراد متجدّدة بتذكير وترحيل لما فات، وقيام الليل ليلةً بليلة، والصيام مع مواسمه.
+- **قضاء ما فات:** يحصي ما عليك من صلوات وصيام، ويقترح أيام القضاء قبل رمضان (الإثنين والخميس والأيام البيض)، ويسجّل ما قضيت بلمسة.
+
+### 🌱 التزكية والمحاسبة
+- **برامج التدرّج:** عبادة تكبر معك يوماً بيوم — تكبيرة الإحرام أربعين يوماً، قيام الليل من ركعتين إلى إحدى عشرة، الرواتب الاثنتا عشرة، الضحى، الاستغفار، وِرد القرآن من صفحة إلى جزء، صيام الإثنين والخميس، وترك عادة — يتحقّق من سجلّاتك تلقائياً، أو صمّم برنامجك.
+- **محاسبة الجمعة:** وقفة كل أسبوع: أسبوعك مقارنةً بالذي قبله، وأسئلة صادقة، وخواطر خاصة بك، وعزمٌ واحد للأسبوع القادم.
+
+### 🤝 الأهل والصحبة
+- **صلة الرحم وبرّ الوالدين:** أرحامك ووالداك وجيرانك وإخوتك في الله، لكلٍّ موعد صلته؛ «الأولى بالصلة الآن»، اتصال وواتساب بلمسة، دعاء الوالدين كل يوم، و«برٌّ لا ينقطع» لمن سبقونا إلى الله، وخطة لطيفة لإصلاح القطيعة.
+- **المجموعات:** مجموعة خاصة برمز دعوة مع أهلك وأصحابك — ختمة جماعية تتقاسمون أجزاءها الثلاثين، وهدف ذكر مشترك، وترتيب بينكم.
+
+### 🏆 الإنجاز
+- **الترتيب:** اليوم وأمس والأسبوع والشهر، دون تسجيل دخول، مع إخفاء الاسم لمن شاء.
+- **الأوسمة:** أكثر من ٣٧٠ وساماً ومستويات وتحديات يومية.
+- **الإحصاءات:** يومك وأسبوعك وشهرك لكل عبادة، وتقويم هجري وميلادي.
+
+### 📚 وأيضاً
+- مكتبة الحديث: أكثر من ٦٢ ألف حديث من الكتب التسعة مع بحث سريع.
+- حلقات العلم والمهام والعادات، ومهام المنزل.
+- القبلة، والمساجد القريبة، والزكاة والصدقة، وأدوات Android على الشاشة الرئيسية.
+
+---
+
+## لقطات
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/adhkar.jpg" width="210" /><br/>الأذكار</td>
+<td align="center"><img src="docs/screenshots/dhikr.jpg" width="210" /><br/>العدّاد</td>
+<td align="center"><img src="docs/screenshots/quran.jpg" width="210" /><br/>القرآن مع مصحفي</td>
+<td align="center"><img src="docs/screenshots/awrad.jpg" width="210" /><br/>الوِرد والقيام</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/programs.jpg" width="210" /><br/>برامج التدرّج</td>
+<td align="center"><img src="docs/screenshots/program-run.jpg" width="210" /><br/>برنامج جارٍ</td>
+<td align="center"><img src="docs/screenshots/friday.jpg" width="210" /><br/>محاسبة الجمعة</td>
+<td align="center"><img src="docs/screenshots/qada.jpg" width="210" /><br/>قضاء ما فات</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/silat.jpg" width="210" /><br/>صلة الرحم</td>
+<td align="center"><img src="docs/screenshots/silat-parents.jpg" width="210" /><br/>برّ الوالدين</td>
+<td align="center"><img src="docs/screenshots/groups.jpg" width="210" /><br/>الختمة الجماعية</td>
+<td align="center"><img src="docs/screenshots/prayer-mode.jpg" width="210" /><br/>وضع الصلاة</td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/leaderboard.jpg" width="210" /><br/>الترتيب</td>
+<td align="center"><img src="docs/screenshots/badges.jpg" width="210" /><br/>الأوسمة</td>
+<td align="center"><img src="docs/screenshots/stats.jpg" width="210" /><br/>الإحصاءات</td>
+<td align="center"><img src="docs/screenshots/hadith.jpg" width="210" /><br/>مكتبة الحديث</td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/desktop.jpg" width="860" alt="رفيقي على ويندوز" /><br/>على الحاسوب</p>
+
+---
+
+## التثبيت
+
+| المنصّة | الطريقة |
+|---|---|
+| **أندرويد** | حمّل ملف `APK` من [صفحة الإصدارات](https://github.com/Hassan-98/Rafiqi/releases/latest)، وافتحه، واسمح بالتثبيت من هذا المصدر عند السؤال. |
+| **ويندوز** | حمّل `Rafiqi_x64-setup.exe` من [صفحة الإصدارات](https://github.com/Hassan-98/Rafiqi/releases/latest) وشغّله. |
+
+**التحديثات تلقائية:** يصلك كل تحسين داخل التطبيق دون إعادة التثبيت — تظهر لك شاشة «تحديث متاح» فتضغط «تحديث الآن». لا تحتاج تنزيل نسخة جديدة إلا حين نضيف ميزة تتطلّب الهاتف نفسه (مثل «وضع الصلاة»)، وسيخبرك التطبيق بذلك.
+
+## البداية في دقيقتين
+
+1. **اسمك وموقعك:** ليحسب مواقيت مدينتك بدقة.
+2. **التنبيهات:** اتبع خطوات «ضمان التنبيهات» في الإعدادات (السماح بالإشعارات، واستثناء التطبيق من توفير البطارية) — هي سرّ وصول الأذان في وقته على أندرويد.
+3. **سجّل صلاتك من الرئيسية:** لمسة على الصلاة بعد أدائها. كلما سجّلت أكثر، صار رفيقك أذكى في تذكيرك.
+4. **اربط «مصحفي»** (اختياري) من صفحة «القرآن» ليظهر وِردك وختماتك هنا.
+5. **سجّل الدخول بجوجل** (اختياري) لتُحفظ بياناتك وتنتقل معك بين أجهزتك.
+
+## أسئلة شائعة
+
+<details>
+<summary><b>لا يصلني الأذان أو التذكير في وقته</b></summary>
+
+من «الإعدادات ← التنبيهات» افتح «ضمان التنبيهات»: اسمح بالإشعارات والمنبّهات الدقيقة، واستثنِ رفيقي من توفير البطارية، وفعّل «التشغيل التلقائي» إن كان هاتفك يطلبه (شاومي، أوبو، هواوي…). ثم جرّب «جرّب تنبيه الأذان».
+</details>
+
+<details>
+<summary><b>هل يعمل دون إنترنت؟</b></summary>
+
+نعم. المواقيت والأذكار والتسجيل والإحصاءات كلها على جهازك. الإنترنت للمزامنة والترتيب والمجموعات والتحديثات فقط.
+</details>
+
+<details>
+<summary><b>من يرى عبادتي؟</b></summary>
+
+لا أحد. تبقى بياناتك على جهازك (وفي حسابك الخاص إن فعّلت المزامنة). الترتيب يرى مجموع نقاطك فقط، ويمكنك إخفاء اسمك أو الخروج من الترتيب. ملاحظات المحاسبة والقضاء وأرقام أرحامك لا تغادر حسابك.
+</details>
+
+<details>
+<summary><b>كيف تُحسب نقاط الترتيب؟</b></summary>
+
+بحسب جهد العمل: الصيام ٣٠، كل فرض ١٠، الجماعة في المسجد +٣ (الفجر والعشاء +٥)، صفحة القرآن في ختمتك ٢، ركعة القيام ٣، الزيارة في صلة الرحم ٨… والجدول الكامل في صفحة «الترتيب ← كيف تُحتسب النقاط؟». والترتيب حافزٌ على المسارعة في الخير، لا ميزانٌ للقبول.
+</details>
+
+<details>
+<summary><b>هل يناسب المرأة؟</b></summary>
+
+نعم: أيام العذر لا تكسر سلاسلها ولا تنقص نقاطها، و«على وقتها» بدل «في المسجد»، وقضاء صيام رمضان يُقترح لها تلقائياً، ومهام المنزل لها نقاطها.
+</details>
+
+---
+
+> «أحبُّ الأعمال إلى الله أدومُها وإن قلّ» — متفق عليه
+
+</div>
+
+<details>
+<summary><b>For developers</b></summary>
+
+React 19 · TypeScript · Vite · Tailwind CSS 4 · zustand — one web bundle shipped to Android (Capacitor) and Windows (Tauri 2), with over-the-air bundle updates. Supabase for optional sync and the leaderboard.
+
+```bash
+pnpm install            # pnpm only (node_modules is a pnpm tree)
+pnpm dev                # web, http://localhost:5173
+pnpm desktop:dev        # Windows shell (src-tauri)
+pnpm desktop:build      # → src-tauri/target/release/bundle/nsis/*.exe
+pnpm android:build      # → android/app/build/outputs/apk/sideload/debug/*.apk
+npx tsc -b              # typecheck
 ```
-src/
-├── components/        # Reusable UI components
-│   ├── ui/            # Base: Button, Card, Badge, Modal, BottomSheet
-│   ├── modules/       # One component per worship module
-│   └── charts/        # Stat chart wrappers
-├── pages/             # Route-level pages (Home, Stats, Settings, Module detail)
-├── services/
-│   ├── NotificationService.ts   # Android bridge + browser fallback
-│   ├── PrayerTimeService.ts     # adhan-js wrapper
-│   └── StorageService.ts        # localStorage abstraction
-├── store/             # Zustand slices (settings, progress, notifications)
-├── hooks/             # Custom hooks (useStreak, usePrayerTimes, useNotifications)
-├── types/             # Shared TypeScript interfaces
-└── utils/             # Pure helper functions
-```
 
-### Android WebView Compatibility Rules
-- Always use `HashRouter` (not `BrowserRouter`) to avoid 404s in WebView.
-- Never use `window.location.href` for navigation — always use React Router's `useNavigate`.
-- Avoid Web APIs unavailable in WebView: `Notification API`, `Service Workers`, `Web Push`. Route all OS-level features through the Android bridge.
-- Define the Android bridge interface in TypeScript:
-```ts
-interface AndroidBridge {
-  scheduleNotification(payload: string): void;
-  cancelNotification(id: string): void;
-  requestPermission(): void;
-  getDeviceLanguage(): string;
-}
-declare global {
-  interface Window { Android?: AndroidBridge; }
-}
-```
-
-## Development Workflow
-- The app must run perfectly in a standard browser via `npm run dev` for fast iteration without needing Android Studio.
-- All Android bridge calls must be wrapped in `if (window.Android)` guards.
-- Use `.env` files for environment-specific config (e.g., `VITE_DEFAULT_PRAYER_METHOD`).
-- Write Storybook stories for all base UI components.
-
-## Code Quality Standards
-- All components must be typed with explicit TypeScript interfaces — no `any`.
-- Use `React.memo` and `useMemo`/`useCallback` where re-render performance matters (e.g., large lists, chart data).
-- Every service class must have an interface and be injectable for testing.
-- Follow conventional commits: `feat:`, `fix:`, `chore:`, `refactor:`.
-- Add JSDoc comments to all exported functions and types.
-
-## Response Guidelines
-When implementing features, always:
-1. Start with the TypeScript interfaces and types.
-2. Implement the service/logic layer before the UI.
-3. Build UI components bottom-up (base components → composed modules → pages).
-4. Include smooth animations and loading states — never show raw unstyled content.
-5. Test edge cases: empty states, first-time user onboarding, permission denied, offline mode.
-6. When a feature requires native Android capabilities beyond WebView, clearly document the required Android-side implementation as a comment block.
-
-Always prioritize user experience, performance, and maintainability. The goal is an app that a Muslim uses daily and feels proud of — beautiful, fast, reliable, and spiritually meaningful.
+Pure logic lives next to each feature with an assert-based check in `scripts/*.test.ts` (run with esbuild + node; see the header of each file). Design rules: `docs/DESIGN-SYSTEM.md`.
+</details>

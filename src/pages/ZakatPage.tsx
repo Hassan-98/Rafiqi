@@ -35,8 +35,10 @@ const DEFAULT: ZakatInputs = {
   receivables: 0,
   stocksValue: 0,
   debts: 0,
-  goldPricePerGram: 250, // approximate SAR per gram — user adjusts
-  silverPricePerGram: 3,
+  // Egyptian pounds (owner 2026-11-19: the app is Egyptian), approximate 24k gold and pure
+  // silver per gram, late 2025 — the page asks to confirm them before trusting the nisab.
+  goldPricePerGram: 6000,
+  silverPricePerGram: 75,
 };
 
 // Persist the calculator between visits (people revisit zakat over days) and
@@ -57,7 +59,12 @@ function loadSaved(): SavedCalc {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SavedCalc>;
       return {
-        inputs: { ...DEFAULT, ...(parsed.inputs ?? {}) },
+        inputs: {
+          ...DEFAULT,
+          ...(parsed.inputs ?? {}),
+          // Prices never confirmed are the old riyal defaults: start them over in pounds.
+          ...(parsed.pricesUpdatedAt ? {} : { goldPricePerGram: DEFAULT.goldPricePerGram, silverPricePerGram: DEFAULT.silverPricePerGram }),
+        },
         pricesUpdatedAt: parsed.pricesUpdatedAt ?? null,
       };
     }
@@ -142,7 +149,7 @@ export function ZakatPage() {
       }}
       hint={f.hint}
       leftIcon={f.icon}
-      rightIcon={<span className="text-[11px] text-text-muted">{f.unit ?? 'ر.س'}</span>}
+      rightIcon={<span className="text-[11px] text-text-muted">{f.unit ?? 'ج.م'}</span>}
     />
   );
 
@@ -163,7 +170,7 @@ export function ZakatPage() {
               </h1>
               <p className="mt-1 text-3xl font-counter font-bold text-teal dark:text-teal-light tabular-nums leading-none">
                 {formatCurrency(result.zakatDue)}
-                <span className="text-base font-normal text-text-muted"> ر.س</span>
+                <span className="text-base font-normal text-text-muted"> ج.م</span>
               </p>
               <p className="mt-1.5 text-[11px] text-text-secondary leading-relaxed">
                 {result.isAboveNisab

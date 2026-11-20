@@ -117,6 +117,8 @@ async function bootCapacitor(): Promise<void> {
 
   // 7. Home-screen widgets: keep their data snapshot fresh for the native side.
   startWidgetBridge();
+  // «وضع الصلاة»: send the native silence plan (Android); re-syncs itself on resume + settings/location/iqama changes.
+  void import('@/services/prayerMode').then((m) => m.startPrayerModeSync());
 
   // 8. Smart notifications (streak-at-risk, qiyam last-third, weekly summary,
   //    record celebrations) — re-plans itself on store changes + resume.

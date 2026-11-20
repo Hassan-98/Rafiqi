@@ -8,9 +8,11 @@
 //!   Google sign-in callback (com.darkmon.myzikr://) reaches the running instance.
 
 use std::{
+  collections::HashMap,
   fs,
   path::{Path, PathBuf},
   sync::Mutex,
+  time::Duration,
 };
 
 use percent_encoding::percent_decode_str;
@@ -217,6 +219,44 @@ fn shell_confirm_update(app: AppHandle, shell: tauri::State<'_, Shell>) -> Resul
   fs::write(updates_dir(&app).join("state.json"), serde_json::to_vec(&state).unwrap()).map_err(|e| e.to_string())
 }
 
+/// `desktopShell.fetchText`: another site's page as text — the lesson-link reader
+/// (src/services/lessonLink.ts) needs YouTube's pages, which the webview's own
+/// fetch can't read (CORS). HTTPS only, 12 s, at most 8 MB; the caller passes
+/// the headers (UA, language, consent cookie) and an optional JSON body.
+#[tauri::command]
+async fn shell_fetch_text(
+  url: String,
+  method: Option<String>,
+  headers: Option<HashMap<String, String>>,
+  body: Option<String>,
+) -> Result<String, String> {
+  const MAX: usize = 8 << 20;
+  let url = Url::parse(&url).map_err(|e| e.to_string())?;
+  if url.scheme() != "https" {
+    return Err("https only".into());
+  }
+  let client = reqwest::Client::builder().timeout(Duration::from_secs(12)).build().map_err(|e| e.to_string())?;
+  let mut req = if method.as_deref() == Some("POST") { client.post(url) } else { client.get(url) };
+  for (k, v) in headers.unwrap_or_default() {
+    req = req.header(k, v);
+  }
+  if let Some(body) = body {
+    req = req.body(body);
+  }
+  let mut res = req.send().await.map_err(|e| e.to_string())?;
+  if !res.status().is_success() {
+    return Err(format!("HTTP {}", res.status().as_u16()));
+  }
+  let mut bytes = Vec::new();
+  while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
+    if bytes.len() + chunk.len() > MAX {
+      return Err("too large".into());
+    }
+    bytes.extend_from_slice(&chunk);
+  }
+  Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// «مصحفي» (the Quran app): Mushaf.exe [page]. The page never supplies a path — the
 /// user picks the exe once in a native dialog and it is kept in the app's config dir.
 #[tauri::command]
@@ -365,7 +405,8 @@ pub fn run() {
       shell_take_deep_link,
       shell_install_update,
       shell_confirm_update,
-      shell_open_mushafi
+      shell_open_mushafi,
+      shell_fetch_text
     ])
     .setup(|app| {
       let handle = app.handle().clone();

@@ -30,6 +30,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MediaPlaybackPlugin.class);
         registerPlugin(LiveUpdatePlugin.class);
         registerPlugin(MushafiPlugin.class);
+        registerPlugin(PrayerModePlugin.class);
+        registerPlugin(SilatPhonePlugin.class);
         super.onCreate(savedInstanceState);
     }
 

@@ -21,10 +21,10 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/', label: 'اليوم', Icon: Home },
   { path: '/quran', label: 'القرآن', Icon: BookOpen },
   { path: '/adhkar', label: 'الأذكار', Icon: Sparkles, also: ['/tasbih'] },
-  { path: '/targets', label: 'وِرد وقيام', Icon: MoonStar, also: ['/qiyam', '/module/qiyam'] },
-  // «المهام والعادات» — full name on the page; the dock label is shortened to
-  // fit six tabs on a 360px phone.
-  { path: '/study', label: 'مهام وعادات', Icon: ListChecks, also: ['/habits', '/module/habits'] },
+  // Also hosts برامج التدرّج / حلقات العلم / القضاء / محاسبة الجمعة as tabs.
+  { path: '/targets', label: 'عباداتي', Icon: MoonStar, also: ['/qiyam', '/module/qiyam', '/module/fasting', '/programs', '/qada', '/friday-review', '/study/circle'] },
+  // «حياتي» (was «مهام وعادات», owner 2026-11-18): المهام، العادات، حلقات العلم، المنزل، صلة الرحم.
+  { path: '/study', label: 'حياتي', Icon: ListChecks, also: ['/habits', '/module/habits', '/silat'] },
   { path: '/me', label: 'أنا', Icon: UserRound, also: ['/settings', '/stats', '/more'] },
 ];
 
@@ -56,28 +56,16 @@ export const BottomNavBar = React.memo(function BottomNavBar() {
 
   return (
     <>
-      {/* Flush with the screen bottom; the bar's own background fills the
-          safe-area inset below the tabs. Only the top corners are rounded. */}
+      {/* A floating dock (owner 2026-11-19: tidier, and responsive): inset from the
+          edges, its width capped and centred so six tabs don't drift apart on a
+          tablet or a narrow desktop window; it sits above the safe-area inset.
+          The active tab is a slim pill behind its icon, its label in the accent. */}
       <nav
-        className="lg:hidden fixed inset-x-0 bottom-0 z-30 rounded-t-[26px] bg-white/90 dark:bg-dark-surface/90 backdrop-blur-xl shadow-[var(--shadow-lg)] ring-1 ring-black/[0.05] dark:ring-white/[0.07]"
-        style={{ paddingBottom: 'var(--safe-bottom)' }}
+        className="lg:hidden fixed inset-x-0 bottom-0 z-30 px-3 pointer-events-none"
+        style={{ paddingBottom: 'calc(var(--safe-bottom) + 0.5rem)' }}
         aria-label="التنقل الرئيسي"
       >
-        <div className="relative flex items-stretch h-16">
-          {/* One pill sliding between tabs. The shell is always RTL:
-              inset-s-0 = rightmost tab, negative X steps left. */}
-          {activeIndex >= 0 ? (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-1.5 inset-s-0 px-1.5 transition-transform duration-300 ease-out-soft motion-reduce:transition-none"
-              style={{
-                width: `${100 / NAV_ITEMS.length}%`,
-                transform: `translateX(${-activeIndex * 100}%)`,
-              }}
-            >
-              <span className="block h-full rounded-[20px] bg-teal/12 dark:bg-teal/20" />
-            </span>
-          ) : null}
+        <div className="pointer-events-auto relative mx-auto max-w-[34rem] flex items-stretch h-16 px-1 rounded-[24px] bg-white/92 dark:bg-dark-surface/92 backdrop-blur-xl shadow-[var(--shadow-lg)] ring-1 ring-black/[0.06] dark:ring-white/[0.08]">
           {NAV_ITEMS.map((item, i) => {
             const active = i === activeIndex;
             const { Icon } = item;
@@ -86,26 +74,26 @@ export const BottomNavBar = React.memo(function BottomNavBar() {
                 key={item.path}
                 to={item.path}
                 onClick={() => void hapticsService.selection()}
-                className="relative flex-1 flex flex-col items-center justify-center gap-1 min-h-11 group"
+                className="relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 group"
                 aria-current={active ? 'page' : undefined}
               >
                 <span
                   className={[
-                    'transition-[color,transform] duration-200',
+                    'relative flex items-center justify-center h-8 w-[3.25rem] max-w-full rounded-full transition-colors duration-200 motion-reduce:transition-none',
                     active
-                      ? 'text-teal dark:text-teal-light -translate-y-px'
-                      : 'text-text-muted group-hover:text-text-secondary',
+                      ? 'bg-teal/14 dark:bg-teal/22 text-teal dark:text-teal-light'
+                      : 'text-text-muted group-hover:text-text-secondary group-hover:bg-teal/5',
                   ].join(' ')}
                 >
                   <span className="relative inline-flex">
-                    <Icon size={22} strokeWidth={active ? 2.3 : 1.9} />
+                    <Icon size={21} strokeWidth={active ? 2.3 : 1.9} />
                     {dot(item.path)}
                   </span>
                 </span>
                 <span
                   className={[
-                    // One line always: six tabs share a 360px dock.
-                    'text-[10px] leading-none whitespace-nowrap',
+                    // One line always: six tabs share a 320px phone.
+                    'max-w-full truncate px-0.5 text-[10.5px] leading-none',
                     active ? 'text-teal dark:text-teal-light font-bold' : 'text-text-muted font-medium',
                   ].join(' ')}
                 >

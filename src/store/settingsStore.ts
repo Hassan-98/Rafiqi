@@ -62,8 +62,17 @@ interface SettingsState {
 
   /** «الترتيب»: upload the day's points (signed in). Off = rows deleted from the board. */
   leaderboardJoin: boolean;
-  /** Show «مجهول ١٢٣٤» on the board instead of `userName`. */
+  /** Show «مجهول» on the board instead of `userName`. */
   leaderboardHideName: boolean;
+
+  /** «الحفظ والمراجعة»: all of البعيد is reviewed once every this many days (hifzModel). */
+  hifzCycle: number;
+  /** New pages to memorize a week; 0 = no goal. */
+  hifzWeekly: number;
+  /** A daily reminder of the day's review while pages are left (attention/plugins.ts). */
+  hifzRemind: boolean;
+  /** Its time, HH:mm; '' = half an hour after Fajr (07:00 without a location). */
+  hifzRemindAt: string;
 
   // Actions
   setUserName: (name: string) => void;
@@ -93,6 +102,7 @@ interface SettingsState {
   setAdhkarBrief: (on: boolean) => void;
   setLeaderboardJoin: (on: boolean) => void;
   setLeaderboardHideName: (on: boolean) => void;
+  setHifzPlan: (p: Partial<Pick<SettingsState, 'hifzCycle' | 'hifzWeekly' | 'hifzRemind' | 'hifzRemindAt'>>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -125,6 +135,10 @@ export const useSettingsStore = create<SettingsState>()(
       adhkarBrief: false,
       leaderboardJoin: true,
       leaderboardHideName: false,
+      hifzCycle: 14,
+      hifzWeekly: 0,
+      hifzRemind: true,
+      hifzRemindAt: '',
 
       setUserName: (name) => set({ userName: name }),
       setGender: (gender) => set({ gender }),
@@ -188,6 +202,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAdhkarBrief: (adhkarBrief) => set({ adhkarBrief }),
       setLeaderboardJoin: (leaderboardJoin) => set({ leaderboardJoin }),
       setLeaderboardHideName: (leaderboardHideName) => set({ leaderboardHideName }),
+      setHifzPlan: (p) => set(p),
     }),
     {
       name: 'myzikr:settings',

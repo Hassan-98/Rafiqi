@@ -75,7 +75,7 @@ export function SadaqahPage() {
   const [goalOpen, setGoalOpen] = useState(false);
 
   // Primary currency = the one most recently used (entries are newest-first).
-  const primaryCurrency = entries[0]?.currency ?? 'ر.س';
+  const primaryCurrency = entries[0]?.currency ?? 'ج.م';
 
   // One-time migration of the legacy loose-key goal into the store (so it
   // survives backup/restore like everything else).
@@ -503,7 +503,7 @@ function SadaqahForm({
   onSubmit: (data: Omit<SadaqahEntry, 'id' | 'createdAt'>) => void;
 }) {
   const [amount, setAmount] = useState(initial?.amount.toString() ?? '');
-  const [currency, setCurrency] = useState(initial?.currency ?? 'ر.س');
+  const [currency, setCurrency] = useState(initial?.currency ?? 'ج.م');
   const [cause, setCause] = useState(initial?.cause ?? '');
   const [date, setDate] = useState(initial?.date ?? format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState(initial?.notes ?? '');
@@ -512,7 +512,7 @@ function SadaqahForm({
   useEffect(() => {
     if (!open) return;
     setAmount(initial?.amount.toString() ?? '');
-    setCurrency(initial?.currency ?? 'ر.س');
+    setCurrency(initial?.currency ?? 'ج.م');
     setCause(initial?.cause ?? '');
     setDate(initial?.date ?? format(new Date(), 'yyyy-MM-dd'));
     setNotes(initial?.notes ?? '');
@@ -523,7 +523,7 @@ function SadaqahForm({
     if (!Number.isFinite(n) || n <= 0 || !cause.trim()) return;
     onSubmit({
       amount: n,
-      currency: currency.trim() || 'ر.س',
+      currency: currency.trim() || 'ج.م',
       cause: cause.trim(),
       date,
       notes: notes.trim() || undefined,

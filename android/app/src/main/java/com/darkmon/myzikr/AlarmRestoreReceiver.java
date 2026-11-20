@@ -39,6 +39,11 @@ public class AlarmRestoreReceiver extends BroadcastReceiver {
             FullScreenAlarmStore.rearmAll(ctx);
         } catch (Exception ignored) {
         }
+        // «وضع الصلاة»: restore a window whose END was missed while off, re-arm the next one.
+        try {
+            PrayerModeReceiver.rearm(ctx);
+        } catch (Exception ignored) {
+        }
     }
 
     private static void dropStaleOneShots(Context ctx) {

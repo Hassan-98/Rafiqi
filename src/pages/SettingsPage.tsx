@@ -11,7 +11,7 @@ import { Mosque } from '@/components/icons/Mosque';
 import { Card } from '@/components/ui/Card';
 import { Toggle } from '@/components/ui/Toggle';
 import { Button } from '@/components/ui/Button';
-import { Medallion, SectionTitle, ArchMotif, Star8 } from '@/components/ui/Ornament';
+import { Medallion, SectionTitle, ArchMotif } from '@/components/ui/Ornament';
 import { TextInput } from '@/components/ui/TextInput';
 import { PalettePicker } from '@/components/settings/PalettePicker';
 import { FontPicker } from '@/components/settings/FontPicker';
@@ -27,7 +27,7 @@ import { volumeKeysSupported } from '@/services/volumeKeys';
 import { hapticsService } from '@/services/HapticsService';
 import { toast } from '@/store/toastStore';
 import { toArabicDigits } from '@/utils/arabicFormat';
-import { BUNDLE_VERSION, checkForUpdate, promptUpdate, updatesSupported } from '@/services/appUpdate';
+import { BUNDLE_VERSION } from '@/services/appUpdate';
 import type { ModuleId, PrayerMethodId } from '@/types';
 
 const PRAYER_METHODS: { id: PrayerMethodId; labelKey: string }[] = [
@@ -365,17 +365,6 @@ function AccountTab() {
           <LinkRow Icon={History} title="سجل التحديثات" hint={`نسختك ${toArabicDigits(BUNDLE_VERSION)}، وما الجديد في كل تحديث`} to="/changelog" />
         </Card>
       </Block>
-
-      <Card variant="gradient-edge" className="p-5 text-center flex flex-col items-center gap-1.5">
-        <Star8 size={22} className="text-gold" />
-        <p className="font-ornate text-2xl text-teal dark:text-teal-light mt-1">رَفِيقِي</p>
-        <p className="text-[11px] text-text-muted">رفيقك في العبادة</p>
-        <div className="w-16 h-px bg-gold/40 my-2" aria-hidden />
-        <p className="text-[11px] text-text-muted">تطوير وتصميم</p>
-        <p className="font-display text-base font-bold text-text-primary dark:text-text-on-dark">م / حسن علي</p>
-        <p className="text-[11px] text-text-muted mt-2" dir="ltr">v{BUNDLE_VERSION}</p>
-        {updatesSupported ? <CheckUpdateButton /> : null}
-      </Card>
     </>
   );
 }
@@ -399,34 +388,12 @@ function LeaderboardPrefs() {
         <Row
           Icon={EyeOff}
           title="إخفاء اسمي في الترتيب"
-          hint="يراك الآخرون باسم «مجهول» ورقم ثابت"
+          hint="يراك الآخرون باسم «مجهول»"
           trailing={<Toggle checked={hide} onChange={setHide} size="sm" label="إخفاء اسمي في الترتيب" hideLabel disabled={!join} />}
         />
         <LinkRow Icon={Trophy} title="عرض الترتيب" to="/leaderboard" />
       </Group>
     </Block>
-  );
-}
-
-/** Manual update check; a found update shows the same prompt as the start-up check. */
-function CheckUpdateButton() {
-  const [busy, setBusy] = useState(false);
-  const check = async () => {
-    setBusy(true);
-    try {
-      const m = await checkForUpdate();
-      if (m) promptUpdate(m);
-      else toast.success('أنت على أحدث إصدار');
-    } catch {
-      toast.error('تعذّر التحقق من التحديثات', 'تأكد من اتصالك بالإنترنت');
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Button variant="soft" size="sm" leftIcon={<RefreshCw size={14} />} onClick={check} loading={busy}>
-      التحقق من التحديثات
-    </Button>
   );
 }
 
@@ -722,6 +689,7 @@ function WorshipTab() {
 
   return (
     <>
+
       <Block title={t('settings_quran')}>
         <Group>
           <Row

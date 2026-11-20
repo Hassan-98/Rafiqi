@@ -5,7 +5,8 @@
  */
 import assert from 'node:assert/strict';
 import { scoreDay, wirdWeight, LB, type ScoreInput, type WirdInput } from '@/services/leaderboardScore';
-import { CHORES, choresFor } from '@/data/houseChores';
+import { CHORES, choreOf, choresFor } from '@/data/houseChores';
+import type { MushafiSession } from '@/store/mushafiStore';
 
 const K = '2026-11-14';
 const Y = '2026-11-13';
@@ -56,11 +57,11 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
     maghrib: { fard: true },
     isha: { fard: true },
   };
-  assert.equal(part(s, 'fard'), 50);
+  assert.equal(part(s, 'fard'), 5 * LB.fard);
   assert.equal(part(s, 'mosque'), LB.mosqueHeavy + LB.mosque);
   assert.equal(part(s, 'after'), 3 * LB.after);
-  assert.equal(part(s, 'rawatib'), 2 + 4 + 2);
-  assert.equal(pts(s), 50 + LB.mosqueHeavy + LB.mosque + 9 + 8);
+  assert.equal(part(s, 'rawatib'), (2 + 4 + 2) * LB.rawatib);
+  assert.equal(pts(s), 5 * LB.fard + LB.mosqueHeavy + LB.mosque + 3 * LB.after + 8 * LB.rawatib);
   assert.equal(pts(s, Y), 0, 'other days untouched');
 }
 
@@ -82,12 +83,12 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   assert.equal(part(s, 'qiyam', K), 2 * LB.qiyam);
 }
 
-// Duha capped at 8 rakaat; legacy `true` = 2.
+// Duha: 12 rakaat (the top log option) = 36; legacy `true` = 2.
 {
   const s = base();
   s.duha[K] = 12;
   s.duha[Y] = true;
-  assert.equal(part(s, 'duha'), LB.duhaMax * LB.duha);
+  assert.equal(part(s, 'duha'), 36);
   assert.equal(part(s, 'duha', Y), 2 * LB.duha);
 }
 
@@ -113,23 +114,34 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   assert.equal(part(s, 'sleep'), LB.sleep, 'no set size → any reading counts whole');
 }
 
-// Tasbih: one per hundred, capped.
+// Tasbih: 2 per hundred, up to a thousand a day.
 {
   const s = base();
+  s.events = [ev(K, 'tasbih', 'c1', 350)];
+  assert.equal(part(s, 'tasbih'), 6);
   s.events = [ev(K, 'tasbih', 'c1', 5000)];
-  assert.equal(part(s, 'tasbih'), LB.tasbihMax);
+  assert.equal(part(s, 'tasbih'), 20);
 }
 
-// Awrad weigh their effort: a longer text or a bigger count is heavier (owner).
+// Awrad weigh their effort, per minute, NO ceiling (owner 2026-11-19): a bigger count and a longer text are heavier.
 {
-  const istighfar = wird({ id: 'a', note: 'أستغفر الله' });
-  const tahlil = wird({ id: 'b', note: 'لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير' });
-  assert.equal(wirdWeight(istighfar), 4);
-  assert.equal(wirdWeight(tahlil), 10);
-  assert.ok(wirdWeight({ ...istighfar, total: 1000 }) > wirdWeight(istighfar), 'bigger count');
-  assert.equal(wirdWeight(wird({ id: 'p', unit: 'page', total: 1 })), 4);
-  assert.equal(wirdWeight(wird({ id: 'j', unit: 'juz', total: 1 })), LB.wirdMax);
-  assert.equal(wirdWeight(wird({ id: 's', total: 3 })), LB.wirdMin);
+  // The two one-tap templates (TargetFormModal): 19 vs 23 letters.
+  const istighfar = wird({ id: 'a', title: 'الاستغفار', items: ['أستغفر الله وأتوب إليه'] });
+  const salah = wird({ id: 'b', title: 'الصلاة على النبي ﷺ', items: ['اللهم صلِّ وسلِّم على نبيّنا محمد'] });
+  assert.equal(wirdWeight(istighfar), 3);
+  assert.equal(wirdWeight(salah), 4);
+  assert.ok(wirdWeight(salah) > wirdWeight(istighfar), 'الصلاة على النبي is longer to say');
+  assert.equal(wirdWeight({ ...istighfar, total: 1000 }), 32);
+  assert.equal(wirdWeight({ ...istighfar, total: 200 }), 6, '1000 ≈ five times 200');
+  // No text written: the name says which dhikr; «ﷺ» is said in full.
+  assert.equal(wirdWeight(wird({ id: 'c', title: 'الاستغفار' })), wirdWeight(istighfar));
+  assert.ok(wirdWeight(wird({ id: 'e', title: 'الصلاة على النبي ﷺ' })) > wirdWeight(wird({ id: 'f', title: 'الاستغفار' })));
+  assert.equal(wirdWeight(wird({ id: 'g', note: 'اللهم صل على محمد ﷺ' })), wirdWeight(wird({ id: 'h', note: 'اللهم صل على محمد صلى الله عليه وسلم' })));
+  const tahlil = wird({ id: 'i', note: 'لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير' });
+  assert.equal(wirdWeight(tahlil), 9);
+  assert.equal(wirdWeight(wird({ id: 'p', unit: 'page', total: 1 })), LB.pageRead, 'a page = a khatma page');
+  assert.equal(wirdWeight(wird({ id: 'j', unit: 'juz', total: 1 })), 40, 'a juz a day, uncapped');
+  assert.equal(wirdWeight(wird({ id: 's', total: 3 })), 1, 'a finished wird earns at least one');
   assert.equal(wirdWeight(wird({ id: 'w', total: 700, recurrence: 'weekly' })), wirdWeight(wird({ id: 'd' })), 'a weekly wird weighs its daily share');
 }
 
@@ -153,8 +165,8 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   s.periods = [{ targetId: 'n', endedAt: endOf(Y), goal: 100, done: 100, base: 100, extra: 50 }];
   assert.equal(part(s, 'nafl:n', Y), Math.round(wirdWeight(s.targets[0]) / 2));
   s.targets = Array.from({ length: 9 }, (_, i) => wird({ id: `j${i}`, unit: 'juz', total: 1, current: 1, extra: 1 }));
-  assert.equal(awrad(s), LB.awradMax, 'the wirds are capped…');
-  assert.equal(scoreDay(s, K).parts.filter((x) => x.id.startsWith('nafl:')).reduce((n, x) => n + x.points, 0), 9 * LB.wirdMax, '…their nafila is not');
+  assert.equal(awrad(s), 9 * 40, 'no ceiling on the wirds…');
+  assert.equal(scoreDay(s, K).parts.filter((x) => x.id.startsWith('nafl:')).reduce((n, x) => n + x.points, 0), 9 * 40, '…nor their nafila');
 }
 
 // Women: «على وقتها» weighs like the men's mosque (her prayer at home is the better one).
@@ -169,7 +181,7 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   assert.equal(part(s, 'onTime'), 0);
 }
 
-// A weekly wird: the day's logged reps against its daily share; all awrad together capped.
+// A weekly wird: the day's logged reps against its daily share; no ceiling on all awrad together.
 {
   const s = base();
   s.targets = [wird({ id: 'w', total: 70, recurrence: 'weekly', deadline: endOf(K) + 3 * 86_400_000 })];
@@ -178,7 +190,7 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   s.events = [ev(K, 'awrad', 'w', 5)];
   assert.equal(awrad(s), Math.round(wirdWeight(s.targets[0]) / 2));
   s.targets = Array.from({ length: 9 }, (_, i) => wird({ id: `t${i}`, unit: 'juz', total: 1, current: 1 }));
-  assert.equal(awrad(s), LB.awradMax);
+  assert.equal(awrad(s), 9 * wirdWeight(s.targets[0]));
 }
 
 // Friday (Y) for men is الجمعة: no قبلية, four after; a woman's Friday is a Dhuhr.
@@ -208,6 +220,36 @@ const range = (a: number, z: number) => Array.from({ length: z - a + 1 }, (_, i)
   s.mushafi.khatmas = [khatma('all', 0, 604)];
   s.mushafi.days = { [K]: range(1, 604) };
   assert.equal(part(s, 'quran'), 604 * LB.pageRead, 'a whole khatma in a day — no cap (owner)');
+  s.mushafi.khatmas = [khatma('rev', 0, 20, 'hifz')];
+  s.mushafi.days = { [K]: [1, 2] };
+  assert.equal(part(s, 'quran'), 2 * LB.reviewPage, 'a review khatma page = a review page');
+}
+
+// Sessions (مصحفي «جلسة»): read ×2, heard ×1, first memorization ×15, review ×3 — by pages, not time,
+// and a page the day's khatma counted earns once.
+{
+  const s = base();
+  const ses = (o: Partial<MushafiSession>): MushafiSession => ({ id: 'x', ty: 'tilawa', a: 0, z: 6, s: ts(K, 9), e: ts(K, 10), t: 1, ...o });
+  s.mushafi.sessions = [ses({})]; // الفاتحة = page 1
+  assert.equal(part(s, 'quranSessions'), LB.pageRead);
+  s.mushafi.sessions = [ses({ ty: 'listen' })];
+  assert.equal(part(s, 'quranSessions'), LB.pageListen);
+  assert.equal(part(s, 'quranSessions', Y), 0, 'on the day it began only');
+  s.mushafi.sessions = [ses({})];
+  s.mushafi.khatmas = [khatma('read', 0, 20)];
+  s.mushafi.days[K] = [1];
+  assert.equal(part(s, 'quran'), LB.pageRead);
+  assert.equal(part(s, 'quranSessions'), 0, 'the khatma already counted page 1 today');
+  s.mushafi.khatmas = [];
+  s.mushafi.days = {};
+  s.mushafi.sessions = [ses({ id: 'h1', ty: 'hifz' }), ses({ id: 'h2', ty: 'hifz', s: ts(K, 11), e: ts(K, 12) })];
+  assert.equal(part(s, 'hifz'), LB.hifzPage, 'memorized once');
+  assert.equal(part(s, 'review'), LB.reviewPage, 'the second time is review');
+  // By pages only, never by time (owner 2026-11-20: الكهف recorded in seconds earned nothing).
+  s.mushafi.sessions = [ses({ ty: 'hifz', e: ts(K, 9) + 5_000 })];
+  assert.equal(part(s, 'hifz'), LB.hifzPage, 'five seconds long — still its page');
+  s.mushafi.sessions = [ses({ ty: 'review', e: ts(K, 9), m: 1 })];
+  assert.equal(part(s, 'review'), LB.reviewPage, 'entered by hand, no length — still its page');
 }
 
 // A very full day: uncapped Qur'an goes past the server cap (600) — the upload clamps.
@@ -237,9 +279,9 @@ const range = (a: number, z: number) => Array.from({ length: z - a + 1 }, (_, i)
   const at = ts(K, 20);
   const wd = new Date(at).getDay();
   s.circles = [
-    // Live in person, the slot says 90 min: 9 × 2 + 3 = 21.
+    // Live in person, the slot says 90 min: 9 × studyPer10 + studyInPerson.
     { format: 'live', status: 'active', subject: 'fiqh', platform: 'inperson', slots: [{ weekday: wd, durationMin: 90 }], log: [{ date: at, status: 'attended' }] },
-    // Recorded, 40 min logged: 4 × 2 = 8; a missed one and yesterday's earn nothing here.
+    // Recorded, 40 min logged: 4 × studyPer10; a missed one and yesterday's earn nothing here.
     {
       format: 'series',
       status: 'active',
@@ -252,11 +294,11 @@ const range = (a: number, z: number) => Array.from({ length: z - a + 1 }, (_, i)
       ],
     },
   ];
-  assert.equal(part(s, 'study'), 21 + 8);
+  assert.equal(part(s, 'study'), 9 * LB.studyPer10 + LB.studyInPerson + 4 * LB.studyPer10);
   assert.equal(part(s, 'study', Y), 3 * LB.studyPer10, 'recorded default: half an hour');
-  // The circle's «مدة الدرس» outranks the slot (a logged length outranks both): 4.5 × 2 + 3.
+  // The circle's «مدة الدرس» outranks the slot (a logged length outranks both): 4.5 × studyPer10 + studyInPerson.
   s.circles![0].durationMin = 45;
-  assert.equal(part(s, 'study'), 12 + 8);
+  assert.equal(part(s, 'study'), Math.round(4.5 * LB.studyPer10 + LB.studyInPerson + 4 * LB.studyPer10));
   // A typo of 600 minutes counts as studyMaxMin.
   s.circles = [{ format: 'series', status: 'active', subject: 'fiqh', log: [{ date: at, status: 'watched', durationMin: 600 }] }];
   assert.equal(part(s, 'study'), (LB.studyMaxMin / 10) * LB.studyPer10);
@@ -274,11 +316,60 @@ const range = (a: number, z: number) => Array.from({ length: z - a + 1 }, (_, i)
     { chore: 'gone', day: K },
     { chore: 'cook', kind: 'nope', day: K },
   ];
-  assert.equal(part(s, 'house'), 10 + 3 + 3 + 4);
-  assert.equal(part(s, 'house', Y), 6);
-  // Owner 2026-11-16: a man never sees the women's chores; a woman still sees every chore.
+  assert.equal(part(s, 'house'), 10 + 3 + 3 + 4, 'iron logged before it had kinds keeps its 4');
+  assert.equal(part(s, 'house', Y), 8, 'shopping/big retuned 6 → 8 (owner 2026-11-19: the men\'s points were low)');
+  // Owner 2026-11-19 split/levelled the catalog: entries logged before still score as they did.
+  const legacy = [
+    { chore: 'fold', day: K }, // 3 — was a fixed value
+    { chore: 'homework', day: K }, // 5
+    { chore: 'repair', day: K }, // 6
+    { chore: 'errands', day: K }, // 3
+    { chore: 'clean', kind: 'deep', day: K }, // 10 — retired, split into tidy/sweep/mop/deep…
+    { chore: 'clean', kind: 'tidy', day: K }, // 3
+    { chore: 'scrub', day: K }, // 4 — retired
+    { chore: 'kids', day: K }, // 4 — retired
+    { chore: 'laundry', kind: 'hand', day: K }, // 6
+    { chore: 'fold', kind: 'nope', day: K }, // 0 — an unknown kind earns nothing, `was` or not
+  ];
+  s.house = legacy;
+  assert.equal(part(s, 'house'), 3 + 5 + 6 + 3 + 10 + 3 + 4 + 4 + 6);
+  const live = CHORES.filter((c) => !c.retired);
+  // Owner 2026-11-16: a man never sees the women's chores; a woman sees every live one but the men's
+  // «own side only» (helping his family at home); nobody the retired.
   assert.ok(choresFor('male').length && choresFor('male').every((c) => c.for !== 'female'));
-  assert.equal(choresFor('female').length, CHORES.length);
+  assert.equal(choresFor('female').length, live.filter((c) => !c.ownSideOnly).length);
+  assert.ok(!choresFor('female').some((c) => c.id === 'helpHome') && choresFor('male').some((c) => c.id === 'helpHome'));
+  assert.equal(choresFor(null).length, live.length);
+  for (const g of ['male', 'female', null] as const) assert.ok(choresFor(g).every((c) => !c.retired), `no retired chore for ${g}`);
+  assert.equal(choreOf('clean')?.label, 'تنظيف البيت', 'a retired chore still labels its history');
+  // Every chore one id; every live one levelled (2+ kinds, ids unique within it).
+  assert.equal(new Set(CHORES.map((c) => c.id)).size, CHORES.length, 'chore ids unique');
+  for (const c of live) {
+    assert.ok((c.kinds?.length ?? 0) >= 2, `${c.id} has levels`);
+    assert.equal(new Set(c.kinds!.map((k) => k.id)).size, c.kinds!.length, `${c.id} kind ids unique`);
+  }
+  // The men's side reaches the cooking's top.
+  const top = (f: 'male' | 'female') => Math.max(...live.filter((c) => c.for === f).flatMap((c) => c.kinds!.map((k) => k.points)));
+  assert.ok(top('male') >= top('female'), 'men\'s top points match the women\'s');
 }
 
 console.log('leaderboardScore: all checks passed');
+
+// «مختصر» morning / evening: the brief set earns half — the same 5 for both (owner 2026-11-18); the full set 10.
+{
+  const s = base();
+  s.setReps = { morning: 374, evening: 274 };
+  s.briefReps = { morning: 78, evening: 78 };
+  s.events = [
+    { ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 78 },
+    { ts: 0, dateKey: K, domain: 'dhikr', refId: 'evening', title: '', amount: 78 },
+  ] as never;
+  assert.equal(part(s, 'morning'), LB.morning / 2, 'brief morning = 5');
+  assert.equal(part(s, 'evening'), LB.evening / 2, 'brief evening = 5 — equal to the morning');
+  s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 374 }] as never;
+  assert.equal(part(s, 'morning'), LB.morning, 'the full set = 10');
+  s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 39 }] as never;
+  assert.equal(part(s, 'morning'), Math.round(LB.morning / 4), 'half the brief set = a quarter');
+  s.events = [{ ts: 0, dateKey: K, domain: 'dhikr', refId: 'morning', title: '', amount: 226 }] as never;
+  assert.equal(part(s, 'morning'), Math.round(LB.morning * 0.75), 'halfway from brief to full = 7.5 → 8');
+}

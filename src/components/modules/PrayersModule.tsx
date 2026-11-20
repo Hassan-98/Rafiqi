@@ -24,6 +24,7 @@ import { toast } from '@/store/toastStore';
 import { toArabicDigits } from '@/utils/arabicFormat';
 import { WEEKDAY_SHORT_AR } from '@/services/statsService';
 import type { PrayerName } from '@/types';
+import { PrayerStreaksStrip } from '@/components/home/PrayerStreaksStrip';
 import type { PrayerCheckType } from '@/store/prayerLogStore';
 
 const PRAYER_KEYS: PrayerName[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
@@ -248,6 +249,8 @@ export function PrayersModule() {
           اضغط أي علامة مرة أخرى لإلغاء تسجيلها إن سجّلتها خطأً
         </p>
       </section>
+
+      <PrayerStreaksStrip />
 
       {gender === null ? <GenderPrompt /> : null}
 

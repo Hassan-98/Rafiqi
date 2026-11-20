@@ -15,7 +15,7 @@ import { qiyamNightKey, useQiyamStore } from '@/store/qiyamStore';
 import { useProgressStore } from '@/store/progressStore';
 import { usePrayerLogStore } from '@/store/prayerLogStore';
 import { useQuranStore } from '@/store/quranStore';
-import { useMushafiStore, quranTypeStats } from '@/store/mushafiStore';
+import { useMushafiStore, quranTypeStats, sessionStats } from '@/store/mushafiStore';
 import { QURAN_TYPE_IDS, quranTypeOf, type QuranType } from '@/data/quranTypes';
 import { useSettingsStore } from '@/store/settingsStore';
 import {
@@ -27,8 +27,17 @@ import {
 import { useActivityLogStore } from '@/store/activityLogStore';
 import { useTargetsStore } from '@/store/targetsStore';
 import { useAttentionStore } from '@/store/attentionStore';
-import { KAHF_PAGES } from '@/services/dayAttention';
+import { useEngagementStore } from '@/store/engagementStore';
+import { useCalendarPrefs } from '@/services/calendarEvents';
+import { useTasksStore } from '@/store/tasksStore';
+import { useStudyStore } from '@/store/studyStore';
+import { clockAr, isDoneOn, occursOn } from '@/store/studyModel';
+import { KAHF_PAGES, type DayTimes } from '@/services/dayAttention';
 import { planCompanion, type CompanionInput, type CompanionKind } from '@/services/smartCompanion';
+import { companionSources, safely } from '@/services/attention/registry';
+import { addOutcomes, arm, fatigueOf, sentToday, settle, type ArmedNudge } from '@/services/engagement';
+// Features register their attention / companion sources here (side effects).
+import '@/services/attention/plugins';
 import { currentBadgeMetrics } from '@/services/BadgeEngine';
 import { BADGES, badgeVisible } from '@/data/badges';
 import { useBadgeStore } from '@/store/badgeStore';
@@ -77,6 +86,11 @@ export interface SmartNotification {
   soundKey: SoundKey;
   /** `prayers` + meta.prayer → the «صلّيت» action logs that prayer. */
   meta?: Record<string, string>;
+  /** Companion nudges: remembered by the engagement ledger (services/engagement.ts). */
+  dedupe?: string;
+  topic?: string;
+  label?: string;
+  domain?: string;
 }
 
 export interface SmartPlanInput {
@@ -161,9 +175,9 @@ export function planSmartNotifications(input: SmartPlanInput): SmartPlan {
   // 0) «رفيقك اليومي» — prayers, adhkar, wird and challenges at the user's own times.
   const companion = input.companion ? planCompanion({ ...input.companion, snap, now, prefs }) : [];
   for (const n of companion) out.push(n);
-  /** A companion nudge already speaks for this streak on that day. */
+  /** A companion nudge already speaks for this streak on that day («ختام اليوم» names every streak at stake). */
   const covered = (domain: string, day: Date) =>
-    companion.some((n) => dk(n.at) === dk(day) && (n.domain === domain || (domain === 'overall' && n.kind === 'combo')));
+    companion.some((n) => dk(n.at) === dk(day) && (n.domain === domain || n.kind === 'wrapup' || (domain === 'overall' && n.kind === 'combo')));
 
   // 1) Streak at risk — the evening of today, or tomorrow once today is safe.
   if (prefs.streak) {
@@ -237,7 +251,7 @@ export function planSmartNotifications(input: SmartPlanInput): SmartPlan {
         title: 'حصاد أسبوعك',
         body,
         at,
-        deepLinkPath: route('/stats'),
+        deepLinkPath: route('/harvest'),
         moduleId: 'smart.weekly',
         soundKey: 'default',
       });
@@ -336,7 +350,7 @@ export function nightWindow(nightKey: string): { lastThird: Date } | null {
 }
 
 /** Prayer times of any day (null without a location). */
-function dayTimes(day: Date) {
+export function prayerTimesOf(day: Date): DayTimes | null {
   const { coords, prayerMethod, madhabSchool } = useSettingsStore.getState();
   if (!coords) return null;
   try {
@@ -361,8 +375,31 @@ const NEAR_METRICS: [NearSlot, string][] = [
   ['pray:isha', 'isha_streak'],
 ];
 
+/** A day's lessons and open tasks, earliest first: «درس التفسير ٥:٣٠ م». */
+function agendaOf(dayKey: string): string[] {
+  const wd = new Date(`${dayKey}T12:00:00`).getDay();
+  const out: { t: string; line: string }[] = [];
+  for (const c of useStudyStore.getState().circles) {
+    if (c.status !== 'active') continue;
+    for (const s of c.slots) if (s.weekday === wd) out.push({ t: s.time, line: `${c.title} ${clockAr(s.time)}` });
+  }
+  for (const t of useTasksStore.getState().tasks) {
+    if (!occursOn(t, dayKey) || isDoneOn(t, dayKey)) continue;
+    out.push({ t: t.time ?? '99', line: t.time ? `${t.title} ${clockAr(t.time)}` : t.title });
+  }
+  return out.sort((a, b) => a.t.localeCompare(b.t)).map((x) => x.line);
+}
+
+/** A source's verdict on one of its delivered nudges (x.<source>.<key>). */
+function pluginActed(a: ArmedNudge): boolean | null {
+  const [, id, ...rest] = (a.topic ?? '').split('.');
+  const src = companionSources().find((x) => x.id === id);
+  return src?.acted ? safely(id, () => src.acted!({ key: rest.join('.'), at: new Date(a.at) }, new Date()), null) : null;
+}
+
 /** The live inputs of «رفيقك اليومي». */
 function companionInput(now: Date): SmartPlanInput['companion'] {
+  const { armed, outcomes } = useEngagementStore.getState();
   const st = useNotificationStore.getState();
   const settings = useSettingsStore.getState();
   const today = format(now, 'yyyy-MM-dd');
@@ -409,7 +446,7 @@ function companionInput(now: Date): SmartPlanInput['companion'] {
   for (const p of ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as PrayerName[]) after[p] = remainingMinutes(postPrayerItems(p, postPrayerAdhkar), {}, {});
 
   return {
-    times: dayTimes,
+    times: prayerTimesOf,
     male: settings.gender === 'male',
     excusedToday: !!usePrayerLogStore.getState().excused[today],
     enabled: {
@@ -422,7 +459,7 @@ function companionInput(now: Date): SmartPlanInput['companion'] {
       'dhikr.evening': cfg('dhikr.evening').enabled,
       quran: cfg('quran').enabled,
     },
-    anchors: { morning: own('dhikr.morning'), evening: own('dhikr.evening'), quran: own('quran') ?? wird?.reminderTime },
+    anchors: { morning: own('dhikr.morning'), evening: own('dhikr.evening'), quran: own('quran') ?? wird?.reminderTime, suhoor: own('fasting') },
     quran: wird ? { goal: wird.amount, done: quran.wirdHistory[today]?.achieved ?? 0, unit: wird.unit } : null,
     khatmas: running.map((x) => ({ name: x.name, type: x.type, owe: x.owe })),
     typeIdle,
@@ -436,7 +473,15 @@ function companionInput(now: Date): SmartPlanInput['companion'] {
     nearBadges: near,
     combos,
     muted: useAttentionStore.getState().muted,
-    kahfRead: (m.days[today] ?? []).some((p) => p >= KAHF_PAGES[0] && p <= KAHF_PAGES[1]),
+    kahfRead: [...(m.days[today] ?? []), ...(sessionStats(m.sessions).byDay.get(today) ?? []).flatMap((x) => (x.ty === 'tilawa' || x.ty === 'listen' ? [...x.pages.keys()] : []))]
+      .some((p) => p >= KAHF_PAGES[0] && p <= KAHF_PAGES[1]),
+    gender: settings.gender,
+    hijriOffset: useCalendarPrefs.getState().hijriOffset,
+    fastIntent: useAttentionStore.getState().fastIntent,
+    sentToday: sentToday(armed, now),
+    fatigue: fatigueOf(outcomes, armed, now),
+    agendaOf,
+    sources: companionSources(),
   };
 }
 
@@ -474,7 +519,15 @@ async function run(): Promise<void> {
   if (!notificationService.isAvailable()) return;
   try {
     const st = useNotificationStore.getState();
-    const plan = planSmartNotifications(currentInput());
+    const now = new Date();
+    // What was delivered since the last run, and was it acted on? (engagement.ts)
+    const eng = useEngagementStore.getState();
+    const snap = collectSnapshot();
+    const settled = settle(eng.armed, snap, now, pluginActed);
+    const outcomes = addOutcomes(eng.outcomes, settled.outcomes, now);
+    // Settled first: today's verdicts shape today's plan.
+    eng.commit(settled.armed, outcomes, {});
+    const plan = planSmartNotifications(currentInput(now));
     if (!st.smartSeeded || Object.keys(plan.celebrated).length > 0) st.markSmartCelebrated(plan.celebrated);
 
     const qiyamCustom = st.getConfig('qiyam').customChannelId;
@@ -495,6 +548,8 @@ async function run(): Promise<void> {
     // Retract only ARMED smart ids that are no longer planned — cancelling a
     // delivered one would also yank it off the screen.
     await notificationService.cancelByPrefix?.('myzikr_smart_', new Set(plan.notifications.map((n) => n.id)));
+    const labels = Object.fromEntries(plan.notifications.filter((n) => n.topic && n.label).map((n) => [n.topic!, n.label!]));
+    eng.commit(arm(settled.armed, plan.notifications, now, snap), outcomes, labels);
   } catch (e) {
     console.warn('[smartNotifications] reschedule failed', e);
   }
@@ -552,11 +607,15 @@ export function startSmartNotificationSync(debounceMs = 1500): () => void {
     watch(useQuranStore, (s) => s.wirdHistory),
     // A مصحفي pull can move a khatma without changing the wird total.
     watch(useMushafiStore, (s) => s.syncedAt),
+    // «الحفظ والمراجعة»: a review recorded here, or its reminder's settings.
+    watch(useMushafiStore, (s) => s.sessions),
+    watch(useSettingsStore, (s) => `${s.hifzRemind}|${s.hifzRemindAt}|${s.hifzCycle}`),
     watch(useNotificationStore, (s) => s.smart),
     watch(useNotificationStore, (s) => s.configs),
     watch(useActivityLogStore, (s) => s.events),
     watch(useTargetsStore, (s) => s.targets),
     watch(useAttentionStore, (s) => s.muted),
+    watch(useAttentionStore, (s) => s.fastIntent),
     watch(usePrayerLogStore, (s) => s.duha),
     watch(useSettingsStore, (s) => s.coords),
     // The fixed adhkar / Quran reminders yield to the companion (and return

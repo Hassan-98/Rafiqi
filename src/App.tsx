@@ -31,6 +31,15 @@ import { HijriCalendarPage } from '@/pages/HijriCalendarPage';
 import { MosquesPage } from '@/pages/MosquesPage';
 import { BadgeGalleryPage } from '@/pages/BadgeGalleryPage';
 import { LeaderboardPage } from '@/pages/LeaderboardPage';
+import { HarvestPage } from '@/pages/HarvestPage';
+import { SilatPage } from '@/pages/SilatPage';
+import { ProgramsPage } from '@/pages/ProgramsPage';
+import { QadaPage } from '@/pages/QadaPage';
+import { FridayReviewPage } from '@/pages/FridayReviewPage';
+import { HifzPage } from '@/pages/HifzPage';
+import { GroupsPage } from '@/pages/GroupsPage';
+import { PrayerModePage } from '@/pages/PrayerModePage';
+import { MindfulPage } from '@/pages/MindfulPage';
 import { ChangelogPage } from '@/pages/ChangelogPage';
 import { SadaqahPage } from '@/pages/SadaqahPage';
 import { ZakatPage } from '@/pages/ZakatPage';
@@ -57,7 +66,9 @@ import { BadgeCelebration } from '@/components/reminders/BadgeCelebration';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Toaster } from '@/components/ui/Toast';
 import { startAppUpdates } from '@/services/appUpdate';
+import { AlertSoundBar } from '@/components/reminders/AlertSoundBar';
 import { UpdateDialog } from '@/components/update/UpdateDialog';
+import { MindfulReminder } from '@/components/mindful/MindfulReminder';
 
 // Native-feel easing for screen transitions (decelerate curve).
 const PAGE_EASE = [0.22, 0.61, 0.36, 1] as const;
@@ -73,7 +84,13 @@ function RootLayout() {
     document.documentElement.scrollTop = 0;
     if (document.body) document.body.scrollTop = 0;
   }, [pathname]);
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      {/* «تذكرة الإتقان» — needs the router (useLocation), so it lives here, not beside <Toaster />. */}
+      <MindfulReminder />
+    </>
+  );
 }
 
 /** Layout with bottom nav — used for main tabs. Content fades/lifts in on each
@@ -156,7 +173,18 @@ const router = createHashRouter([
   // at that page; the rest of the old Quran section lands on «القرآن».
   { path: '/quran/read/:surahId', element: <QuranOpenRedirect /> },
   { path: '/quran/bookmarks', element: <Navigate to="/quran" replace /> },
-  { path: '/quran/memorize/:surahId?', element: <Navigate to="/quran" replace /> },
+  { path: '/quran/memorize/:surahId?', element: <Navigate to="/hifz" replace /> },
+  // «الحفظ والمراجعة»: from مصحفي's hifz/review sessions (and recorded here).
+  {
+    path: '/hifz',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <HifzPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
   { path: '/quran/downloads', element: <Navigate to="/downloads" replace /> },
   {
     path: '/downloads',
@@ -337,11 +365,91 @@ const router = createHashRouter([
     ),
   },
   {
+    path: '/silat',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <SilatPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/programs',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <ProgramsPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/qada',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <QadaPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/friday-review',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <FridayReviewPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/groups',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <GroupsPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/mindful',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <MindfulPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/prayer-mode',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <PrayerModePage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
     path: '/leaderboard',
     element: (
       <RequireOnboarding>
         <NoNavLayout>
           <LeaderboardPage />
+        </NoNavLayout>
+      </RequireOnboarding>
+    ),
+  },
+  {
+    path: '/harvest',
+    element: (
+      <RequireOnboarding>
+        <NoNavLayout>
+          <HarvestPage />
         </NoNavLayout>
       </RequireOnboarding>
     ),
@@ -489,7 +597,7 @@ const router = createHashRouter([
 
   // Main tabs (اليوم / الأوراد / الأذكار / القرآن / العادات / الإعدادات) +
   // tab-shell pages that kept the bottom bar without a tab of their own
-  // (الحفظ / الإحصاء / المزيد — reached from Home's وصول سريع and the hub).
+  // (الإحصاء / المزيد — reached from Home's وصول سريع and the hub).
   {
     path: '/',
     element: (
@@ -500,7 +608,6 @@ const router = createHashRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'quran', element: <QuranPage /> },
-      { path: 'hifz', element: <Navigate to="/quran" replace /> },
       { path: 'adhkar', element: <AdhkarPage /> },
       { path: 'targets', element: <TargetsPage /> },
       // Habits now live in «المهام والعادات»; keep old links / reminder deep links working.
@@ -572,6 +679,7 @@ export default function App() {
     <>
       <RouterProvider router={router} />
       <Toaster />
+      <AlertSoundBar />
       <BadgeCelebration />
       <UpdateDialog />
     </>

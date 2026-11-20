@@ -20,19 +20,53 @@
  *  - It plans today plus the next two days, so a closed app still gets its
  *    morning and evening nudges; ids are dateless per slot (`…_d1`), so every
  *    re-plan overwrites instead of multiplying (see notif-stable-id-rule).
+ *  - It reads the week: a weekday's own rhythm and a habit drifting later
+ *    move the learned minute (attention/learning.ts); a prayer usually missed
+ *    on Tuesdays is asked about earlier on Tuesdays only.
+ *  - It listens (services/engagement.ts): what was delivered today is not
+ *    sent again today; a kind ignored again and again eases off (every 2nd,
+ *    4th, 8th… day); prayer checks never do.
+ *  - It frames the day: «موجز الصباح» (fast, occasion, lessons, wird, and any
+ *    source's line) and «ختام اليوم» (what is still possible, the streak at
+ *    stake) — and ONE «قبل أن يفوت وقتها» for a streak of three days or more.
+ *  - Features add their own nudges through registerCompanionSource.
  */
-import { addDays, format } from 'date-fns';
+import { addDays, differenceInCalendarDays, format } from 'date-fns';
 import { QURAN_TYPES, type QuranType } from '@/data/quranTypes';
 import type { InsightsSnapshot, SnapshotEvent } from '@/services/insightsEngine';
 import type { SmartNotificationPrefs } from '@/store/notificationStore';
 import type { SoundKey } from '@/services/notifications/sounds';
 import type { PrayerName } from '@/types';
-import { habitRates, prayerEnd, RARE, SUNNAH_COPY, type DayTimes, type HabitKey } from '@/services/dayAttention';
+import { chainBefore, habitRates, prayerEnd, RARE, SUNNAH_COPY, type DayTimes, type HabitKey } from '@/services/dayAttention';
 import { duhaWindow } from '@/store/prayerLogStore';
+import { WEEKDAY_LABELS_AR } from '@/services/statsService';
+import { toHijri } from '@/services/HijriService';
+import { expectedMinute, weakWeekdays } from '@/services/attention/learning';
+import { fastReason, occasionOf, seasonNotice } from '@/services/attention/occasions';
+import { safely, type CompanionSource, type SourceContext } from '@/services/attention/registry';
+import { easedAllows, type Fatigue } from '@/services/engagement';
 
 export type { DayTimes } from '@/services/dayAttention';
+export { usualMinute } from '@/services/attention/learning';
 
-export type CompanionKind = 'pray' | 'late' | 'after' | 'morning' | 'evening' | 'sleep' | 'quran' | 'khatma' | 'invite' | 'awrad' | 'combo' | 'suggest';
+export type CompanionKind =
+  | 'pray'
+  | 'late'
+  | 'after'
+  | 'morning'
+  | 'evening'
+  | 'sleep'
+  | 'quran'
+  | 'khatma'
+  | 'invite'
+  | 'awrad'
+  | 'combo'
+  | 'suggest'
+  | 'duha'
+  | 'suhoor'
+  | 'brief'
+  | 'wrapup'
+  | 'plugin';
 
 /** A today's-challenge as the badge engine reports it (only what the planner reads). */
 export interface ComboLike {
@@ -55,7 +89,7 @@ export interface CompanionInput {
   /** Per-reminder master switches the user already has (adhan per prayer, morning, evening, Qur'an). */
   enabled?: Partial<Record<'prayers.fajr' | 'prayers.dhuhr' | 'prayers.asr' | 'prayers.maghrib' | 'prayers.isha' | 'dhikr.morning' | 'dhikr.evening' | 'quran', boolean>>;
   /** Times the user set by hand (HH:mm) — they beat the learned ones. */
-  anchors?: Partial<Record<'morning' | 'evening' | 'quran', string>>;
+  anchors?: Partial<Record<'morning' | 'evening' | 'quran' | 'suhoor', string>>;
   /** Today's Qur'an wird (null = none configured). */
   quran?: { goal: number; done: number; unit: string } | null;
   /** «مصحفي»'s running khatmas (inside their plan): what EACH owes today — the wird is their sum. */
@@ -74,6 +108,19 @@ export interface CompanionInput {
   muted?: readonly string[];
   /** سورة الكهف already read today (مصحفي pages). */
   kahfRead?: boolean;
+  gender?: 'male' | 'female' | null;
+  /** The user's Hijri sighting offset. */
+  hijriOffset?: number;
+  /** The day the user said they will fast («سأصومه» on Home): its suhoor is woken. */
+  fastIntent?: string | null;
+  /** Dedupe keys of the nudges delivered today — none is sent twice in a day. */
+  sentToday?: readonly string[];
+  /** Kinds eased off for being ignored (engagement ledger). */
+  fatigue?: Readonly<Record<string, Fatigue>>;
+  /** A day's tasks and lessons, ready to read («درس التفسير ٥:٣٠ م»), for the morning brief. */
+  agendaOf?: (dayKey: string) => string[];
+  /** Registered sources (attention/registry.ts). */
+  sources?: readonly CompanionSource[];
 }
 
 export interface CompanionNudge {
@@ -89,6 +136,12 @@ export interface CompanionNudge {
   meta?: Record<string, string>;
   /** The streak domain it covers — the generic evening streak nudge skips it. */
   domain?: string;
+  /** Back-off key (engagement.ts); absent = never eased (the prayer checks). */
+  topic?: string;
+  /** Once delivered, this key is not sent again the same day. */
+  dedupe: string;
+  /** A source nudge's name in settings («خفّفتُ تذكير …»). */
+  label?: string;
 }
 
 // ── small helpers ──────────────────────────────────────────────────────────
@@ -100,11 +153,7 @@ const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 const ar = (n: number | string) => String(n).replace(/\d/g, (d) => AR_DIGITS[+d]);
 const dk = (d: Date) => format(d, 'yyyy-MM-dd');
 const route = (path: string) => `/#${path}`;
-const minuteOf = (ts: number) => {
-  const d = new Date(ts);
-  return d.getHours() * 60 + d.getMinutes();
-};
-const at = (day: Date, minute: number) => {
+const at =(day: Date, minute: number) => {
   const t = new Date(day);
   t.setHours(0, 0, 0, 0);
   return new Date(t.getTime() + minute * MIN);
@@ -143,37 +192,7 @@ function pick<T>(pool: T[], seed: number): T {
 }
 const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
 
-// ── learning from the activity log ─────────────────────────────────────────
-/**
- * The user's usual minute of the day for events matching `match` — the median
- * of each day's FIRST such event over the last `window` days (≥3 days needed).
- * `night`: minutes after midnight count as late evening (sleep adhkar at 00:30).
- */
-export function usualMinute(events: SnapshotEvent[], match: (e: SnapshotEvent) => boolean, now: Date, night = false, window = 21): number | null {
-  const from = dk(addDays(now, -window));
-  const today = dk(now);
-  const first = new Map<string, number>();
-  for (const e of events) {
-    if (!match(e) || e.dateKey < from || e.dateKey >= today) continue;
-    let m = minuteOf(e.ts);
-    if (night && m < 12 * 60) m += 24 * 60;
-    const cur = first.get(e.dateKey);
-    if (cur === undefined || m < cur) first.set(e.dateKey, m);
-  }
-  const xs = [...first.values()].sort((a, b) => a - b);
-  if (xs.length < 3) return null;
-  return xs[Math.floor(xs.length / 2)];
-}
-
-/** Consecutive days in `set` ending YESTERDAY (today is still open). */
-function chainBefore(set: Set<string>, now: Date): number {
-  let n = 0;
-  for (let i = 1; i < 800; i++) {
-    if (set.has(dk(addDays(now, -i)))) n++;
-    else break;
-  }
-  return n;
-}
+// ── learning from the activity log (attention/learning.ts) ─────────────────
 /** Had a chain of ≥3 that broke recently (a «return» is worth naming). */
 function brokeRecently(set: Set<string>, now: Date): boolean {
   if (set.has(dk(addDays(now, -1)))) return false;
@@ -258,7 +277,8 @@ const unitCount = (n: number, unit: string) => {
 };
 
 // ── the planner ────────────────────────────────────────────────────────────
-interface Draft extends CompanionNudge {
+interface Draft extends Omit<CompanionNudge, 'dedupe'> {
+  dedupe: string;
   priority: number;
   /** Copy that depends on the final minute (elapsed / time left). */
   compose?: (at: Date) => { title: string; body: string };
@@ -266,13 +286,37 @@ interface Draft extends CompanionNudge {
   latest: Date;
   /** Allowed inside quiet hours (learned bedtime). */
   quietOk?: boolean;
+  /** «ختام اليوم» that names the sleep adhkar: that day's separate sleep nudge stands down. */
+  coversSleep?: boolean;
 }
 
-const PRIORITY: Record<CompanionKind, number> = { pray: 1, late: 1.5, after: 2, morning: 3, evening: 3, combo: 4, quran: 5, khatma: 6, awrad: 6, sleep: 7, invite: 8, suggest: 9 };
-/** Bound to a prayer's own time: outside the daily cap. */
-const UNCAPPED = new Set<CompanionKind>(['pray', 'late']);
+const PRIORITY: Record<CompanionKind, number> = {
+  pray: 1,
+  late: 1.5,
+  after: 2,
+  suhoor: 2,
+  brief: 2.5,
+  morning: 3,
+  evening: 3,
+  wrapup: 3.5,
+  combo: 4,
+  duha: 4,
+  quran: 5,
+  khatma: 6,
+  awrad: 6,
+  plugin: 6.5,
+  sleep: 7,
+  invite: 8,
+  suggest: 9,
+};
+/** A source nudge's priority by the weight it declares. */
+const PLUGIN_PRIORITY = { fard: 1.8, sunnah: 3, extra: 6.5 } as const;
+/** Bound to a prayer's own time (or a fast the user intends): outside the daily cap. */
+const UNCAPPED = new Set<CompanionKind>(['pray', 'late', 'suhoor']);
 /** Nudges per day besides the prayer checks. */
 export const COMPANION_DAILY_CAP = 5;
+/** A streak this long gets one «قبل أن يفوت وقتها» before its window closes. */
+export const RESCUE_CHAIN = 3;
 const GAP = 30 * MIN;
 const ADHAN_GUARD = 8 * MIN;
 
@@ -284,24 +328,54 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
   const on = (k: keyof NonNullable<CompanionInput['enabled']>) => input.enabled?.[k] !== false;
   const drafts: Draft[] = [];
   const seedFor = (kind: string, day: Date) => Math.floor(day.getTime() / DAY_MS) + hashOf(kind);
+  const offset = input.hijriOffset ?? 0;
+  const sent = new Set(input.sentToday ?? []);
 
   // ── learned facts ──
   const setDays = (ref: string) => new Set(events.filter((e) => e.domain === 'dhikr' && e.refId === ref).map((e) => e.dateKey));
   const morningDays = setDays('morning');
   const eveningDays = setDays('evening');
   const sleepDays = setDays('sleep');
-  const usual = {
-    morning: usualMinute(events, (e) => e.domain === 'dhikr' && e.refId === 'morning', now),
-    evening: usualMinute(events, (e) => e.domain === 'dhikr' && e.refId === 'evening', now),
-    sleep: usualMinute(events, (e) => e.domain === 'dhikr' && e.refId === 'sleep', now, true),
-    awrad: usualMinute(events, (e) => e.domain === 'awrad', now),
-  };
+  const isSet = (ref: string) => (e: SnapshotEvent) => e.domain === 'dhikr' && e.refId === ref;
+  /** The learned minute for one day: its weekday's rhythm, a drift, or the usual. */
+  const learned = (day: Date) => ({
+    morning: expectedMinute(events, isSet('morning'), now, day)?.minute ?? null,
+    evening: expectedMinute(events, isSet('evening'), now, day)?.minute ?? null,
+    sleep: expectedMinute(events, isSet('sleep'), now, day, true)?.minute ?? null,
+    awrad: expectedMinute(events, (e) => e.domain === 'awrad', now, day)?.minute ?? null,
+    // The day's first sign of life (from 3 am) — when a brief finds the user awake.
+    wake: expectedMinute(events, (e) => new Date(e.ts).getHours() >= 3, now, day)?.minute ?? null,
+  });
   const lastWeek = Array.from({ length: 7 }, (_, i) => dk(addDays(now, -(i + 1))));
   const logger = lastWeek.filter((k) => PRAYERS.some((p) => log[k]?.[p]?.fard)).length >= 4;
   const afterHabit = lastWeek.reduce((n, k) => n + PRAYERS.filter((p) => log[k]?.[p]?.adhkar).length, 0) >= 3;
   const sleepHabit = [...sleepDays].filter((k) => k >= dk(addDays(now, -14)) && k < today).length >= 2;
   const rates = habitRates(snap, now, input.male);
   const muted = new Set(input.muted ?? []);
+  // Active: worship logged on three of the last seven days — the brief and the wrap-up speak to them.
+  const activeDays = new Set([
+    ...events.map((e) => e.dateKey),
+    ...Object.keys(log).filter((k) => PRAYERS.some((p) => log[k]?.[p]?.fard)),
+    ...Object.values(snap.dailyProgress)
+      .filter((d) => d.modules.some((m) => m.completed))
+      .map((d) => d.dateKey),
+  ]);
+  const active = lastWeek.filter((k) => activeDays.has(k)).length >= 3;
+  const fastHabit = (rates.fasting ?? 0) >= RARE;
+  const weak = Object.fromEntries(PRAYERS.map((p) => [p, logger ? weakWeekdays(log, snap.excused ?? {}, now, p) : new Set<number>()])) as Record<PrayerName, Set<number>>;
+  const wirdDone = (k: string) => (snap.wirdHistory?.[k]?.achieved ?? 0) >= (snap.wirdHistory?.[k]?.amount ?? 1);
+  const wirdChain = chainBefore(new Set(Object.keys(snap.wirdHistory ?? {}).filter(wirdDone)), now);
+
+  const sourceCtx: SourceContext = {
+    now,
+    today,
+    times: input.times(now),
+    timesOf: input.times,
+    gender: input.gender ?? (input.male ? 'male' : null),
+    excused: !!input.excusedToday,
+    hijri: toHijri(now, offset),
+    hijriOffset: offset,
+  };
 
   /** How long after the adhan this prayer is usually logged (minutes), from timed logs. */
   const usualDelay = (p: PrayerName): number | null => {
@@ -320,19 +394,43 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
   const prayerChain = (p: PrayerName) => chainBefore(new Set(Object.keys(log).filter((k) => log[k]?.[p]?.fard)), now);
 
   const quietStartOn = (day: Date) => at(day, hhmm(prefs.quietStart));
+  /** Bedtime when none is learned: the quiet hours' start (after midnight counts as that night). */
+  const bedOn = (day: Date) => {
+    if (!prefs.quietEnabled) return at(day, 22 * 60 + 45);
+    const m = hhmm(prefs.quietStart);
+    return at(day, m < 12 * 60 ? m + 24 * 60 : m);
+  };
 
-  /** Push a nudge timed inside [start, end]; today's that already passed move to "half an hour from now". */
-  const push = (d: Omit<Draft, 'at' | 'latest' | 'priority'> & { anchor: Date; start: Date; end: Date; dayIndex: number }) => {
+  /**
+   * Push a nudge timed inside [start, end]; today's that already passed move to
+   * "half an hour from now" — unless it was already delivered today (once a day).
+   */
+  const push = (d: Omit<Draft, 'at' | 'latest' | 'priority' | 'dedupe'> & { anchor: Date; start: Date; end: Date; dayIndex: number; dedupe?: string; priority?: number }) => {
     if (d.end <= d.start) return;
+    const dedupe = d.dedupe ?? d.id.replace(/_d\d+$/, '');
+    if (d.dayIndex === 0 && sent.has(dedupe)) return;
     let t = clampDate(d.anchor, d.start, d.end);
     if (t.getTime() <= now.getTime() + MIN) {
       if (d.dayIndex > 0) return;
       t = new Date(now.getTime() + 30 * MIN);
       if (t >= d.end) return;
     }
-    const { anchor: _a, start: _s, end, dayIndex: _d, ...rest } = d;
-    drafts.push({ ...rest, at: t, latest: end, priority: PRIORITY[d.kind] });
+    const { anchor: _a, start: _s, end, dayIndex: _d, priority, ...rest } = d;
+    drafts.push({ ...rest, dedupe, at: t, latest: end, priority: priority ?? PRIORITY[d.kind] });
   };
+
+  /**
+   * ONE «قبل أن يفوت وقتها» for a streak of three days or more, near the end of
+   * its window — today only (tomorrow's chain isn't known yet). It is armed in
+   * advance and dropped by the re-plan the moment the deed is logged.
+   */
+  const rescue = (kind: CompanionKind, chain: number, at: Date, end: Date, title: string, body: string, deepLinkPath: string, moduleId: string, soundKey: SoundKey) => {
+    if (chain < RESCUE_CHAIN) return;
+    push({ id: `myzikr_smart_${kind}_last`, kind, topic: kind, title, body, deepLinkPath, moduleId, soundKey, anchor: at, start: new Date(at.getTime() - 10 * MIN), end, dayIndex: 0 });
+  };
+
+  /** «ختام اليوم» will name what is left and the streak at stake — the wird / awrad need no last call of their own. */
+  const wrapping = prefs.wrapup && active;
 
   for (let dayIndex = 0; dayIndex <= 2; dayIndex++) {
     const day = addDays(now, dayIndex);
@@ -342,6 +440,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
     const sfx = dayIndex === 0 ? '' : `_d${dayIndex}`;
     const seed = (kind: string) => seedFor(kind, day);
     const isToday = dayIndex === 0;
+    const usual = learned(day);
 
     // ── 1) «هل صلّيت؟» — today and tomorrow, for users who log their prayers ──
     if (prefs.prayerCheck && logger && dayIndex <= 1 && !(isToday && input.excusedToday)) {
@@ -351,7 +450,9 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         const adhan = T[p];
         const next = p === 'fajr' ? T.sunrise : p === 'isha' ? new Date(T.isha.getTime() + 150 * MIN) : T[PRAYERS[i + 1]];
         const end = new Date(next.getTime() - (p === 'fajr' ? 10 : 15) * MIN);
-        const delay = Math.min(80, Math.max(30, (usualDelay(p) ?? 25) + 15));
+        // A weekday on which this prayer is usually missed: ask early, on that weekday only.
+        const weakDay = weak[p].has(day.getDay());
+        const delay = weakDay ? 20 : Math.min(80, Math.max(30, (usualDelay(p) ?? 25) + 15));
         let anchor = new Date(adhan.getTime() + delay * MIN);
         if (p === 'fajr') anchor = new Date(Math.max(adhan.getTime() + 15 * MIN, Math.min(anchor.getTime(), T.sunrise.getTime() - 30 * MIN)));
         const name = NAME[p];
@@ -361,6 +462,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         const fact = (when: Date) => {
           const left = next.getTime() - when.getTime();
           if (badge) return `صلِّها وسجّلها، وبها تنال وسام «${badge}»`;
+          if (weakDay) return `قد تفوتك يوم ${WEEKDAY_LABELS_AR[day.getDay()]}، فذكّرتك مبكراً`;
           if (chain >= 3) return `سلسلة ${name} ${days(chain)} — لا تدعها تنقطع اليوم`;
           if (nextName && left < 50 * MIN) return `بقي على ${nextName} ${span(left)}`;
           return pick(PRAYER_LINES, seed(`pray${p}`));
@@ -399,6 +501,8 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         const anchor = new Date(end.getTime() - (p === 'asr' ? 35 : p === 'maghrib' ? 20 : 25) * MIN);
         const name = NAME[p];
         const endName = p === 'fajr' ? 'الشروق' : NAME[PRAYERS[PRAYERS.indexOf(p) + 1]];
+        // The last safe moment of a prayer's streak IS this call: it names the streak.
+        const chain = isToday ? prayerChain(p) : 0;
         push({
           id: `myzikr_smart_late_${p}${sfx}`,
           kind: 'late',
@@ -408,7 +512,11 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
           compose: (t) => ({
             title: `بقي على ${endName} ${span(end.getTime() - t.getTime())}`,
             body: sentence(
-              p === 'asr' ? `لم تُسجَّل ${name} بعد — صلّها قبل أن تصفرّ الشمس` : `لم تُسجَّل ${name} بعد — أدركها قبل خروج وقتها`,
+              chain >= RESCUE_CHAIN
+                ? `سلسلة ${name} ${days(chain)} — أدركها قبل خروج وقتها`
+                : p === 'asr'
+                  ? `لم تُسجَّل ${name} بعد — صلّها قبل أن تصفرّ الشمس`
+                  : `لم تُسجَّل ${name} بعد — أدركها قبل خروج وقتها`,
               'وإن كنت صلّيتها فسجّلها بلمسة',
             ),
           }),
@@ -434,17 +542,20 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         if (!loggedAt || now.getTime() - loggedAt > 40 * MIN) continue;
         const m = input.minutes?.after?.[p];
         const t = new Date(Math.max(now.getTime() + 8 * MIN, loggedAt + 12 * MIN));
-        drafts.push({
+        push({
           id: 'myzikr_smart_after',
+          dedupe: `myzikr_smart_after:${p}`,
           kind: 'after',
+          topic: 'after',
           title: pick([`أذكار بعد ${NAME[p]}`, `تقبّل الله ${NAME[p]} — وأذكارها`], seed(`after${p}`)),
           body: `${m ? `نحو ${mins(m)} — ` : ''}${pick(AFTER_LINES, seed(`afterB${p}`))}`,
-          at: t,
-          latest: new Date(t.getTime() + 30 * MIN),
-          priority: PRIORITY.after,
           deepLinkPath: route(`/adhkar?set=postPrayer-${p}`),
           moduleId: 'smart.after',
           soundKey: 'default',
+          anchor: t,
+          start: t,
+          end: new Date(t.getTime() + 30 * MIN),
+          dayIndex,
         });
         break;
       }
@@ -458,11 +569,11 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
       const start = which === 'morning' ? new Date(T.fajr.getTime() + 10 * MIN) : new Date(T.asr.getTime() + 10 * MIN);
       const end = which === 'morning' ? new Date(T.dhuhr.getTime() - 20 * MIN) : new Date(T.isha.getTime() - 10 * MIN);
       const hand = input.anchors?.[which];
-      const learned = usual[which];
+      const minute = usual[which];
       const anchor = hand
         ? at(day, hhmm(hand))
-        : learned != null
-          ? at(day, learned + 15)
+        : minute != null
+          ? at(day, minute + 15)
           : new Date((which === 'morning' ? T.fajr : T.asr).getTime() + (which === 'morning' ? 35 : 45) * MIN);
       const label = which === 'morning' ? 'الصباح' : 'المساء';
       const chain = isToday ? chainBefore(doneSet, now) : 0;
@@ -479,6 +590,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
       push({
         id: `myzikr_smart_${which}${sfx}`,
         kind: which,
+        topic: which,
         domain: 'dhikr',
         title: pick(
           which === 'morning' ? ['أذكار الصباح', 'صباحك بذكر الله', 'حصنك لهذا اليوم'] : ['أذكار المساء', 'مساؤك بذكر الله', 'قبل أن يدخل الليل'],
@@ -493,6 +605,21 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         end,
         dayIndex,
       });
+      // The streak's last safe moment: half an hour before the window closes.
+      if (isToday && !badge) {
+        const close = which === 'morning' ? T.dhuhr : T.isha;
+        rescue(
+          which,
+          chain,
+          new Date(close.getTime() - 45 * MIN),
+          end,
+          `أذكار ${label} قبل أن يفوت وقتها`,
+          `سلسلتك ${days(chain)} — تكفيها دقائق قبل ${which === 'morning' ? 'الظهر' : 'العشاء'}`,
+          route(`/adhkar?set=${which}`),
+          'smart.dhikr',
+          'azkar',
+        );
+      }
     };
     adhkarNudge('morning');
     adhkarNudge('evening');
@@ -504,6 +631,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
       push({
         id: `myzikr_smart_sleep${sfx}`,
         kind: 'sleep',
+        topic: 'sleep',
         title: pick(['أذكار النوم', 'قبل أن تنام'], seed('sleepT')),
         body: `${pick(SLEEP_LINES, seed('sleep'))}${m ? ` — نحو ${mins(m)}` : ''}`,
         deepLinkPath: route('/adhkar?set=sleep'),
@@ -525,11 +653,12 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
       const left = isToday ? (owed ?? q.goal - q.done) : q.goal;
       const hand = input.anchors?.quran;
       const anchor = hand ? at(day, hhmm(hand)) : new Date(T.maghrib.getTime() + 40 * MIN);
-      const chain = isToday ? chainBefore(new Set(Object.keys(snap.wirdHistory ?? {}).filter((x) => (snap.wirdHistory?.[x]?.achieved ?? 0) >= (snap.wirdHistory?.[x]?.amount ?? 1))), now) : 0;
+      const chain = isToday ? wirdChain : 0;
       const badge = isToday ? input.nearBadges?.quran : undefined;
       push({
         id: `myzikr_smart_quran${sfx}`,
         kind: 'quran',
+        topic: 'quran',
         domain: 'quran',
         title: isToday && q.done > 0 ? `بقي من وردك ${unitCount(left, q.unit)}` : `وردك اليوم: ${unitCount(q.goal, q.unit)}`,
         body: (() => {
@@ -556,6 +685,10 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         end: new Date(quietStartOn(day).getTime() - 20 * MIN),
         dayIndex,
       });
+      if (isToday && !badge && !wrapping) {
+        const end = new Date(quietStartOn(day).getTime() - 20 * MIN);
+        rescue('quran', chain, new Date(end.getTime() - 25 * MIN), end, 'وردك قبل أن ينتهي يومك', `${days(chain)} لم ينقطع فيها — بقي ${unitCount(left, q.unit)}`, route('/quran'), 'smart.quran', 'quran');
+      }
     }
 
     // ── 5b) a stalled kind of khatma — in its own words, at its own hour ──
@@ -582,6 +715,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         push({
           id: 'myzikr_smart_khatma',
           kind: 'khatma',
+          topic: 'khatma',
           domain: 'quran',
           title,
           body: pick(lines, seed(`khatma_${x.type}`)),
@@ -639,6 +773,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
       push({
         id: `myzikr_smart_awrad${sfx}`,
         kind: 'awrad',
+        topic: 'awrad',
         domain: 'awrad',
         title: one ? `وِردك: ${pending[0].title}` : 'أورادك اليوم',
         body: `${what} — ${why}`,
@@ -650,6 +785,10 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         end: new Date(quietStartOn(day).getTime() - 15 * MIN),
         dayIndex,
       });
+      if (isToday && !wrapping) {
+        const end = new Date(quietStartOn(day).getTime() - 15 * MIN);
+        rescue('awrad', top.streak, new Date(end.getTime() - 25 * MIN), end, `«${top.title}» قبل أن ينتهي يومك`, `سلسلته ${days(top.streak)} — بقي ${ar(top.left)}`, route('/targets'), 'smart.awrad', 'target');
+      }
     }
 
     // ── 7) «تحدّي اليوم» one step from complete (today) ──
@@ -725,6 +864,7 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         push({
           id: `myzikr_smart_suggest${sfx}`,
           kind: 'suggest',
+          topic: `suggest.${c.h}`,
           title: c.title ?? copy.title,
           body: copy.body,
           deepLinkPath: route(copy.to),
@@ -737,10 +877,175 @@ export function planCompanion(input: CompanionInput): CompanionNudge[] {
         });
       }
     }
+
+    // ── 9) الضحى of a habit with a streak — its last safe moment (today) ──
+    if (prefs.suggestions && isToday && !input.excusedToday && !snap.duha?.[key] && !muted.has('duha') && (rates.duha ?? 0) >= RARE) {
+      const dw = duhaWindow(T);
+      const chain = chainBefore(new Set(Object.keys(snap.duha ?? {})), now);
+      rescue('duha', chain, new Date(dw.end.getTime() - 35 * MIN), new Date(dw.end.getTime() - 10 * MIN), 'الضحى قبل أن يفوت وقتها', `سلسلتك ${days(chain)} — ركعتان قبل أن يقوم قائم الظهيرة`, route('/module/prayers'), 'smart.suggest', 'default');
+    }
+
+    // ── 10) السحور — for a fast the user intends (or keeps) ──
+    const fast = fastReason(day, offset);
+    const fasting = input.fastIntent === key || (fastHabit && !!fast && !muted.has('fasting'));
+    if (fasting && dayIndex <= 1 && !(isToday && input.excusedToday)) {
+      const fajr = T.fajr;
+      const hand = input.anchors?.suhoor;
+      push({
+        id: `myzikr_smart_suhoor${sfx}`,
+        kind: 'suhoor',
+        title: '',
+        body: '',
+        compose: (t) => ({
+          title: `السحور — بقي على الفجر ${span(fajr.getTime() - t.getTime())}`,
+          body: sentence('«تسحّروا فإن في السحور بركة»', fast ? `لصيام ${fast.name}، تقبّل الله` : 'لصيامك، تقبّل الله'),
+        }),
+        deepLinkPath: route('/module/fasting'),
+        moduleId: 'smart.suhoor',
+        soundKey: 'default',
+        // Bound to the fast itself: it rings before dawn, inside quiet hours.
+        quietOk: true,
+        anchor: hand ? at(day, hhmm(hand)) : new Date(fajr.getTime() - 40 * MIN),
+        start: new Date(fajr.getTime() - 120 * MIN),
+        end: new Date(fajr.getTime() - 15 * MIN),
+        dayIndex,
+      });
+    }
+
+    // ── 11) موجز الصباح — the day in one line, after Fajr or when the user wakes ──
+    if (prefs.brief && active && dayIndex <= 1) {
+      const lines: string[] = [];
+      const occasion = occasionOf(day, offset) ?? seasonNotice(day, offset)?.title ?? null;
+      if (fasting) lines.push(fast ? `صيام ${fast.name}` : 'صيامك اليوم');
+      lines.push(...(input.agendaOf?.(key) ?? []).slice(0, 2));
+      const wird = q && q.goal > 0 ? (isToday ? (owed ?? q.goal - q.done) : q.goal) : 0;
+      if (wird > 0) lines.push(`وردك ${unitCount(wird, q!.unit)}`);
+      if (pending.length) lines.push(pending.length === 1 ? `وِرد ${pending[0].title}` : count(pending.length, 'وِرد واحد', 'وِردان', 'أوراد', 'وِرداً'));
+      const fromSources = (input.sources ?? []).flatMap((src) => (src.brief ? safely(src.id, () => src.brief!(sourceCtx, key), []) : []));
+      lines.push(...fromSources.slice(0, 2));
+      // A brief of one fact is just a notification: two at least.
+      if (lines.length + (occasion ? 1 : 0) >= 2) {
+        const wake = usual.wake;
+        push({
+          id: `myzikr_smart_brief${sfx}`,
+          kind: 'brief',
+          topic: 'brief',
+          title: occasion ?? pick(['يومك بإذن الله', 'موجز يومك'], seed('briefT')),
+          body: lines.slice(0, 4).join(' · '),
+          deepLinkPath: route('/'),
+          moduleId: 'smart.brief',
+          soundKey: 'default',
+          anchor: new Date(Math.max(T.fajr.getTime() + 25 * MIN, wake != null ? at(day, wake).getTime() : T.fajr.getTime() + 40 * MIN)),
+          start: new Date(T.fajr.getTime() + 15 * MIN),
+          end: new Date(T.dhuhr.getTime() - 60 * MIN),
+          dayIndex,
+        });
+      }
+    }
+
+    // ── 12) ختام اليوم — before the learned bedtime: what can still be done ──
+    if (wrapping && dayIndex <= 1) {
+      const left: string[] = [];
+      const stakes: [string, number][] = [];
+      const excused = isToday && input.excusedToday;
+      if (!excused && !(isToday && snap.qiyamNights[key])) {
+        left.push('الوتر');
+        if (isToday) stakes.push(['قيامك', chainBefore(new Set(Object.keys(snap.qiyamNights)), now)]);
+      }
+      if (!(isToday && eveningDays.has(key))) {
+        left.push('أذكار المساء');
+        if (isToday) stakes.push(['أذكار المساء', chainBefore(eveningDays, now)]);
+      }
+      const wird = q && q.goal > 0 ? (isToday ? (owed ?? q.goal - q.done) : q.goal) : 0;
+      if (wird > 0) {
+        left.push(`${unitCount(wird, q!.unit)} من وردك`);
+        if (isToday) stakes.push(['وردك', wirdChain]);
+      }
+      if (pending.length) {
+        left.push(pending.length === 1 ? `${pending[0].title} ${ar(pending[0].left)}` : count(pending.length, 'وِرد واحد', 'وِردان', 'أوراد', 'وِرداً'));
+        const top = [...pending].sort((a, b) => b.streak - a.streak)[0];
+        if (isToday) stakes.push([`«${top.title}»`, top.streak]);
+      }
+      const sleepLeft = !(isToday && sleepDays.has(key));
+      if (sleepLeft) left.push('أذكار النوم');
+      // Only the sleep adhkar left: that one has its own nudge.
+      if (left.length > (sleepLeft ? 1 : 0)) {
+        const stake = stakes.filter(([, n]) => n >= RESCUE_CHAIN).sort((a, b) => b[1] - a[1])[0];
+        const bed = usual.sleep != null ? at(day, usual.sleep) : bedOn(day);
+        const anchor = new Date(bed.getTime() - 40 * MIN);
+        push({
+          id: `myzikr_smart_wrapup${sfx}`,
+          kind: 'wrapup',
+          topic: 'wrapup',
+          domain: 'wrapup',
+          title: pick(['ختام يومك', 'قبل أن تنام'], seed('wrapT')),
+          body: `بقي ممكناً: ${left.join('، ')}${stake ? ` — سلسلة ${stake[0]} ${days(stake[1])}` : ''}`,
+          deepLinkPath: route('/'),
+          moduleId: 'smart.wrapup',
+          soundKey: 'default',
+          // At a bedtime the user keeps, quiet hours don't hold it (like the sleep adhkar).
+          quietOk: usual.sleep != null,
+          coversSleep: sleepLeft,
+          anchor,
+          start: new Date(Math.max(T.isha.getTime() + 45 * MIN, anchor.getTime() - 60 * MIN)),
+          end: new Date(anchor.getTime() + 30 * MIN),
+          dayIndex,
+        });
+      }
+    }
   }
 
-  return arrange(drafts, input);
+  // ── 13) the registered sources' own nudges ──
+  for (const src of input.sources ?? []) {
+    for (const c of src.nudges ? safely(src.id, () => src.nudges!(sourceCtx), []) : []) {
+      const dayIndex = differenceInCalendarDays(c.at, now);
+      if (dayIndex < 0 || dayIndex > 2) continue;
+      push({
+        id: `myzikr_smart_x_${src.id}_${c.key}${dayIndex ? `_d${dayIndex}` : ''}`,
+        kind: 'plugin',
+        topic: src.acted ? `x.${src.id}.${c.key}` : undefined,
+        label: c.label ?? c.title,
+        title: c.title,
+        body: c.body,
+        deepLinkPath: route(c.to),
+        moduleId: 'smart.plugin',
+        soundKey: 'default',
+        quietOk: c.quietOk,
+        anchor: c.at,
+        start: c.at,
+        end: c.latest ?? new Date(c.at.getTime() + 60 * MIN),
+        dayIndex,
+        priority: PLUGIN_PRIORITY[c.weight ?? 'extra'],
+      });
+    }
+  }
+
+  // The wrap-up names the sleep adhkar: that night's own sleep nudge stands down.
+  const wrapped = new Set(drafts.filter((d) => d.coversSleep).map((d) => dk(d.at)));
+  const kept = drafts.filter((d) => !((d.kind === 'sleep' || d.topic === 'suggest.sleep') && wrapped.has(dk(d.at))));
+
+  return arrange(ease(kept, input.fatigue ?? {}), input);
 }
+
+/**
+ * Fatigue: a topic eased to level n comes once every 2^n days (each day it is
+ * planned counts as delivered) and yields its slot to the others.
+ */
+function ease(drafts: Draft[], fatigue: Readonly<Record<string, Fatigue>>): Draft[] {
+  const last: Record<string, string | undefined> = Object.fromEntries(Object.entries(fatigue).map(([t, f]) => [t, f.last]));
+  return [...drafts]
+    .sort((a, b) => a.at.getTime() - b.at.getTime())
+    .filter((d) => {
+      const f = d.topic ? fatigue[d.topic] : undefined;
+      if (!f || f.level <= 0) return true;
+      const day = dk(d.at);
+      if (!easedAllows({ level: f.level, last: last[d.topic!] }, day)) return false;
+      last[d.topic!] = day;
+      d.priority += f.level / 2;
+      return true;
+    });
+}
+
 
 /**
  * Delivery: by priority, each nudge takes the first slot from its time up to
@@ -783,7 +1088,7 @@ function arrange(drafts: Draft[], input: CompanionInput): CompanionNudge[] {
     if (slot == null) continue;
     taken.push(slot);
     if (!UNCAPPED.has(d.kind)) perDay.set(dayKey, (perDay.get(dayKey) ?? 0) + 1);
-    const { priority: _p, latest: _l, quietOk: _q, compose, ...n } = d;
+    const { priority: _p, latest: _l, quietOk: _q, coversSleep: _c, compose, ...n } = d;
     const when = new Date(slot);
     out.push({ ...n, ...(compose ? compose(when) : null), at: when });
   }

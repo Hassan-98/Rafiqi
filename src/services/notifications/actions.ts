@@ -9,6 +9,8 @@
  *  - `prayer`   — «ذكّرني بعد ١٠ د» + «✓ صلّيت»   (adhan + iqama, logs THAT prayer)
  *  - `snooze`   — «ذكّرني بعد ١٠ د» only           (habits, awrad, custom, fasting, pre-adhan…)
  *  - `info`     — no buttons                       (smart nudges, summaries, آية وحديث, tests)
+ *  - `silat_call` / `silat_call_wa` — «اتصل» (+ «واتساب») + «ذكّرني» on a «صلة الرحم»
+ *    reminder about someone with a number (meta.person / meta.silat, silatPhone.ts)
  *
  * «تم» used to be on EVERY notification and called markModuleComplete(moduleId)
  * blindly: tapping it on an adhan marked all five prayers done, and on a
@@ -18,13 +20,18 @@
 
 import type { NotificationPayload } from '@/types';
 
-export type ActionKind = 'reminder' | 'prayer' | 'snooze' | 'info';
+export type ActionKind = 'reminder' | 'prayer' | 'snooze' | 'info' | 'silat_call' | 'silat_call_wa';
 
 export const ACTION_TYPES: { id: ActionKind; actions: { id: string; title: string }[] }[] = [
   { id: 'reminder', actions: [{ id: 'snooze', title: 'ذكّرني بعد ١٠ د' }, { id: 'done', title: '✓ تم' }] },
   { id: 'prayer', actions: [{ id: 'snooze', title: 'ذكّرني بعد ١٠ د' }, { id: 'done', title: '✓ صلّيت' }] },
   { id: 'snooze', actions: [{ id: 'snooze', title: 'ذكّرني بعد ١٠ د' }] },
   { id: 'info', actions: [] },
+  { id: 'silat_call', actions: [{ id: 'silat_call', title: 'اتصل' }, { id: 'snooze', title: 'ذكّرني بعد ١٠ د' }] },
+  {
+    id: 'silat_call_wa',
+    actions: [{ id: 'silat_call', title: 'اتصل' }, { id: 'silat_wa', title: 'واتساب' }, { id: 'snooze', title: 'ذكّرني بعد ١٠ د' }],
+  },
 ];
 
 /** Modules whose «تم» maps to a real, honest completion record. */
@@ -43,6 +50,7 @@ export function actionKindFor(p: Pick<NotificationPayload, 'moduleId' | 'meta'>)
   // «تم» handled by studyReminders.handleStudyNotificationAction (lesson / task done).
   if (m === 'study' || m === 'study.task') return 'reminder';
   if (m === 'prayers') return p.meta?.prayer && p.meta.kind !== 'pre' ? 'prayer' : 'snooze';
+  if (m === 'silat') return p.meta?.silat === 'call_wa' ? 'silat_call_wa' : p.meta?.silat === 'call' ? 'silat_call' : 'snooze';
   return m in DONE_MODULE ? 'reminder' : 'snooze';
 }
 
@@ -72,9 +80,14 @@ export interface ActionExtra {
   meta?: Record<string, string>;
 }
 
+let lastDeepLinkAt = 0;
+/** When a notification / deep link last opened a screen (the mindful reminder stays quiet that session). */
+export const lastDeepLinkTime = (): number => lastDeepLinkAt;
+
 /** Hash-router navigation for a `/#/…` deep link (cold + warm start). */
 export function navigateToDeepLink(path?: string | null): void {
   if (!path || typeof path !== 'string') return;
+  lastDeepLinkAt = Date.now();
   const normalized = path.startsWith('/#') ? path : `/#${path.startsWith('/') ? '' : '/'}${path}`;
   const hash = normalized.slice(1); // '#/module/x'
   if (window.location.hash !== hash) window.location.hash = hash;
@@ -91,6 +104,12 @@ export async function handleNotificationAction(event: {
   if (extra.moduleId === 'study' || extra.moduleId === 'study.task') {
     const { handleStudyNotificationAction } = await import('@/services/studyReminders');
     if (handleStudyNotificationAction(event.actionId, extra)) return;
+  }
+
+  if (event.actionId === 'silat_call' || event.actionId === 'silat_wa') {
+    const { handleSilatNotificationAction } = await import('@/services/silatPhone');
+    await handleSilatNotificationAction(event.actionId, extra.meta);
+    return;
   }
 
   if (event.actionId === 'snooze' && extra.originalId) {

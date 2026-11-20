@@ -34,6 +34,8 @@ const HISTORY_KEYS = new Set([
   'myzikr:study',
   'myzikr:tasks',
   'myzikr:house',
+  // «قضاء ما فات»: what was paid only grows (max wins); debts union by id.
+  'myzikr:qada',
   'myzikr:quran',
   'myzikr:memorization',
   'myzikr:tasbih',

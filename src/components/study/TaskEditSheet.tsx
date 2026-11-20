@@ -43,12 +43,15 @@ export function TaskEditSheet({
   task,
   defaultList,
   defaultCircleId,
+  defaultDue,
 }: {
   open: boolean;
   onClose: () => void;
   task?: Task;
   defaultList?: TaskList;
   defaultCircleId?: string;
+  /** A new task's day ('yyyy-MM-dd') — «اليوم» view adds for today. */
+  defaultDue?: string;
 }) {
   const addTask = useTasksStore((s) => s.addTask);
   const updateTask = useTasksStore((s) => s.updateTask);
@@ -84,7 +87,7 @@ export function TaskEditSheet({
         : {
             title: '',
             notes: '',
-            due: '',
+            due: defaultDue ?? '',
             time: '',
             reminderOffset: undefined,
             repeat: 'none',
@@ -226,81 +229,95 @@ export function TaskEditSheet({
             </div>
           </Field>
 
-          <Field label="التذكير" hint={d.time ? undefined : 'حدّد وقتاً للمهمة لتفعيل التذكير'}>
-            <div className="flex flex-wrap gap-2">
-              {REMINDERS.map((o) => (
-                <Pill key={String(o)} active={d.reminderOffset === o} disabled={!d.time && o !== undefined} onClick={() => set({ reminderOffset: o })}>
-                  {o === undefined ? 'بلا تذكير' : o === 0 ? 'عند الموعد' : `قبل ${durationAr(o)}`}
-                </Pill>
-              ))}
-            </div>
-            {d.time && d.reminderOffset !== undefined ? (
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs text-text-muted">النغمة</span>
-                <SoundSelector value={d.soundKey} onChange={(k) => set({ soundKey: k })} ariaLabel="نغمة المهمة" />
-              </div>
-            ) : null}
-          </Field>
-
-          <Field label="التكرار">
-            <div className="flex flex-wrap gap-2">
-              {REPEATS.map((r) => (
-                <Pill key={r} active={d.repeat === r} onClick={() => set({ repeat: r, due: d.due || today })}>
-                  {REPEAT_LABEL[r]}
-                </Pill>
-              ))}
-            </div>
-            {d.repeat === 'custom' ? (
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar mt-1">
-                {WEEKDAY_AR.map((w, wd) => (
-                  <Pill
-                    key={w}
-                    className="px-2.5"
-                    active={d.days.includes(wd)}
-                    onClick={() => set({ days: d.days.includes(wd) ? d.days.filter((x) => x !== wd) : [...d.days, wd].sort() })}
-                  >
-                    {w}
+          {/* The reminder only once there is a time to remind at. */}
+          {d.time ? (
+            <Field label="التذكير">
+              <div className="flex flex-wrap gap-2">
+                {REMINDERS.map((o) => (
+                  <Pill key={String(o)} active={d.reminderOffset === o} onClick={() => set({ reminderOffset: o })}>
+                    {o === undefined ? 'بلا تذكير' : o === 0 ? 'عند الموعد' : `قبل ${durationAr(o)}`}
                   </Pill>
                 ))}
               </div>
-            ) : null}
-            {d.repeat === 'weekdays' ? <span className="text-[11px] text-text-muted">من الأحد إلى الخميس</span> : null}
-          </Field>
-
-          <Field label="الأولوية">
-            <div className="flex gap-2">
-              {PRIORITIES.map((p) => (
-                <Pill key={p} active={d.priority === p} onClick={() => set({ priority: p })} className="flex-1">
-                  {PRIORITY_LABEL[p]}
-                </Pill>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="القائمة">
-            <div className="flex flex-wrap gap-2">
-              {TASK_LISTS.map((l) => (
-                <Pill key={l} active={d.list === l} onClick={() => set({ list: l })}>
-                  {LIST_LABEL[l]}
-                </Pill>
-              ))}
-            </div>
-          </Field>
-
-          {activeCircles.length ? (
-            <Field label="مرتبطة بحلقة (اختياري)">
-              <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                <Pill active={!d.circleId} onClick={() => set({ circleId: undefined })}>
-                  لا
-                </Pill>
-                {activeCircles.map((c) => (
-                  <Pill key={c.id} active={d.circleId === c.id} onClick={() => set({ circleId: c.id, list: 'study' })}>
-                    {c.title}
-                  </Pill>
-                ))}
-              </div>
+              {d.reminderOffset !== undefined ? (
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs text-text-muted">النغمة</span>
+                  <SoundSelector value={d.soundKey} onChange={(k) => set({ soundKey: k })} ariaLabel="نغمة المهمة" />
+                </div>
+              ) : null}
             </Field>
           ) : null}
+
+          {/* Dropdowns keep the sheet short (owner 2026-11-19). */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="التكرار">
+              <select
+                value={d.repeat}
+                onChange={(e) => set({ repeat: e.target.value as TaskRepeat, due: d.due || today })}
+                className={fieldClass}
+                aria-label="التكرار"
+              >
+                {REPEATS.map((r) => (
+                  <option key={r} value={r}>
+                    {REPEAT_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="الأولوية">
+              <select value={d.priority} onChange={(e) => set({ priority: e.target.value as TaskPriority })} className={fieldClass} aria-label="الأولوية">
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {d.repeat === 'custom' ? (
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mt-2" role="group" aria-label="أيام التكرار">
+              {WEEKDAY_AR.map((w, wd) => (
+                <Pill
+                  key={w}
+                  className="px-2.5"
+                  active={d.days.includes(wd)}
+                  onClick={() => set({ days: d.days.includes(wd) ? d.days.filter((x) => x !== wd) : [...d.days, wd].sort() })}
+                >
+                  {w}
+                </Pill>
+              ))}
+            </div>
+          ) : null}
+          {d.repeat === 'weekdays' ? <span className="-mt-2 text-[11px] text-text-muted">من الأحد إلى الخميس</span> : null}
+
+          <div className={['grid gap-3', activeCircles.length ? 'grid-cols-2' : 'grid-cols-1'].join(' ')}>
+            <Field label="القائمة">
+              <select value={d.list} onChange={(e) => set({ list: e.target.value as TaskList })} className={fieldClass} aria-label="القائمة">
+                {TASK_LISTS.map((l) => (
+                  <option key={l} value={l}>
+                    {LIST_LABEL[l]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {activeCircles.length ? (
+              <Field label="حلقة علم">
+                <select
+                  value={d.circleId ?? ''}
+                  onChange={(e) => set(e.target.value ? { circleId: e.target.value, list: 'study' } : { circleId: undefined })}
+                  className={fieldClass}
+                  aria-label="مرتبطة بحلقة"
+                >
+                  <option value="">بلا حلقة</option>
+                  {activeCircles.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+          </div>
 
           <Field label="ملاحظات">
             <TextArea value={d.notes} onValueChange={(v) => set({ notes: v })} rows={3} className={fieldClass} placeholder="تفاصيل، رابط، صفحة…" />
@@ -310,6 +327,27 @@ export function TaskEditSheet({
             <Button fullWidth onClick={save}>
               حفظ
             </Button>
+            {task && task.repeat === 'none' && !task.done ? (
+              <div className="flex items-center gap-2" role="group" aria-label="تأجيل">
+                <span className="text-xs text-text-muted">تأجيل إلى</span>
+                {[
+                  { l: 'الغد', n: 1 },
+                  { l: 'بعد أسبوع', n: 7 },
+                ].map((o) => (
+                  <Pill
+                    active={false}
+                    key={o.n}
+                    onClick={() => {
+                      updateTask(task.id, { due: shiftKey(today, o.n) });
+                      toast.info(o.n === 1 ? 'أُجّلت إلى الغد' : 'أُجّلت أسبوعاً');
+                      onClose();
+                    }}
+                  >
+                    {o.l}
+                  </Pill>
+                ))}
+              </div>
+            ) : null}
             {task ? (
               <div className="flex gap-2">
                 <Button

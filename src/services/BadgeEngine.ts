@@ -18,6 +18,11 @@ import { useSadaqahStore } from '@/store/sadaqahStore';
 import { useStudyStore } from '@/store/studyStore';
 import { useTasksStore } from '@/store/tasksStore';
 import { useHouseStore } from '@/store/houseStore';
+import { useSilatStore } from '@/store/silatStore';
+import { useQadaStore } from '@/store/qadaStore';
+import { useProgramsStore } from '@/store/programsStore';
+import { useFridayReviewStore } from '@/store/fridayReviewStore';
+import { useGroupsStore, groupKhatmaDays } from '@/store/groupsStore';
 import { useAsmaProgressStore } from '@/store/asmaProgressStore';
 import { useHadithStore } from '@/store/hadithStore';
 import { useCalendarPrefs } from '@/services/calendarEvents';
@@ -86,7 +91,7 @@ export function collectBadgeSnapshot(now = new Date()): BadgeSnapshot {
     khatmasFinished: (quran.khatmas ?? [])
       .filter((k) => !listenIds.has(k.id))
       .reduce((n, k) => n + khatmaFinishedCount(k), 0),
-    mushafi: { days: mushafi.days, khatmas: mushafi.khatmas, marks: mushafi.marks, tops: mushafi.tops },
+    mushafi: { days: mushafi.days, khatmas: mushafi.khatmas, marks: mushafi.marks, tops: mushafi.tops, sessions: mushafi.sessions },
     quranWirdDays: Object.keys(quran.wirdHistory ?? {}).filter((k) => {
       const e = quran.wirdHistory[k];
       return e.amount > 0 && e.achieved >= e.amount;
@@ -104,6 +109,11 @@ export function collectBadgeSnapshot(now = new Date()): BadgeSnapshot {
     circles: useStudyStore.getState().circles,
     tasks: useTasksStore.getState().tasks,
     house: useHouseStore.getState().entries,
+    silat: { people: useSilatStore.getState().people, entries: useSilatStore.getState().entries },
+    qada: { debts: useQadaStore.getState().debts, paid: useQadaStore.getState().paid },
+    programs: useProgramsStore.getState().runs,
+    fridayReview: { reviews: useFridayReviewStore.getState().reviews, sunan: useFridayReviewStore.getState().sunan },
+    groupKhatmas: groupKhatmaDays(),
     asmaStudied: useAsmaProgressStore.getState().studied.length,
     hadithFavorites: useHadithStore.getState().favorites.length,
   };
@@ -231,6 +241,14 @@ export function startBadgeSync(debounceMs = 1200): () => void {
     watch(useStudyStore, (s) => s.circles),
     watch(useTasksStore, (s) => s.tasks),
     watch(useHouseStore, (s) => s.entries),
+    watch(useSilatStore, (s) => s.entries),
+    watch(useSilatStore, (s) => s.people),
+    watch(useQadaStore, (s) => s.paid),
+    watch(useQadaStore, (s) => s.debts),
+    watch(useProgramsStore, (s) => s.runs),
+    watch(useFridayReviewStore, (s) => s.reviews),
+    watch(useFridayReviewStore, (s) => s.sunan),
+    watch(useGroupsStore, (s) => s.list),
     watch(useAsmaProgressStore, (s) => s.studied),
     watch(useHadithStore, (s) => s.favorites),
     watch(useCalendarPrefs, (s) => s.hijriOffset),

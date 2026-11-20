@@ -106,6 +106,23 @@ async function run(force: boolean): Promise<void> {
     const { rescheduleAllStudy } = await import('@/services/studyReminders');
     await rescheduleAllStudy();
   });
+  // The 2026-11 chapters — each reschedules by diffing its own stable ids.
+  await step('silat', async () => {
+    const { rescheduleAllSilat } = await import('@/services/silatReminders');
+    await rescheduleAllSilat();
+  });
+  await step('programs', async () => {
+    const { rescheduleAllPrograms } = await import('@/services/programsReminders');
+    await rescheduleAllPrograms();
+  });
+  await step('qada', async () => {
+    const { rescheduleQada } = await import('@/services/qadaReminders');
+    await rescheduleQada();
+  });
+  await step('friday-review', async () => {
+    const { rescheduleFridayReview } = await import('@/services/fridayReviewLive');
+    await rescheduleFridayReview();
+  });
   // «آية وحديث» rolling horizon (fixed slot ids myzikr_insp_0…).
   await step('inspiration', async () => {
     const { rescheduleInspiration } = await import('@/services/inspirationReminders');

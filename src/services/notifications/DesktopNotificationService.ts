@@ -1,3 +1,4 @@
+import { create } from 'zustand';
 import type { NotificationPayload } from '@/types';
 import { nextFireTime, seriesKeyFor, type INotificationService, type PendingItem } from './types';
 import { previewUrl, getSoundDef } from './sounds';
@@ -10,6 +11,33 @@ import { navigateToDeepLink } from './actions';
  * only fire while the window is open; everything is re-armed
  * at every launch (rearmAllReminders({ force: true }) bypasses the per-day keys).
  */
+
+/**
+ * The reminder sound now playing — ONE at a time. Owner 2026-11-17: on the
+ * desktop an adhan could not be stopped (a bare `new Audio().play()` nobody held).
+ * Stopped by «إيقاف» in AlertSoundBar, by Esc, or by clicking the notification.
+ */
+export const useAlertSound = create<{ title: string | null }>(() => ({ title: null }));
+let playing: HTMLAudioElement | null = null;
+
+export function stopAlertSound(): void {
+  if (playing) {
+    playing.pause();
+    playing.removeAttribute('src');
+    playing.load();
+    playing = null;
+  }
+  if (useAlertSound.getState().title !== null) useAlertSound.setState({ title: null });
+}
+
+function playAlertSound(url: string, title: string): void {
+  stopAlertSound();
+  const a = new Audio(url);
+  playing = a;
+  a.addEventListener('ended', () => playing === a && stopAlertSound());
+  useAlertSound.setState({ title });
+  void a.play().catch(() => playing === a && stopAlertSound());
+}
 
 // setTimeout overflows past ~24.8 days; farther ones are re-armed at a later launch.
 const MAX_DELAY = 2 ** 31 - 1;
@@ -56,7 +84,7 @@ export class DesktopNotificationService implements INotificationService {
     try {
       const def = getSoundDef(payload.soundKey ?? (payload.alarm ? 'adhan_makkah' : 'default'));
       const url = previewUrl(def.key);
-      if (url) void new Audio(url).play().catch(() => undefined);
+      if (url) playAlertSound(url, payload.title);
       // Same tag = same series: a new fire replaces the previous one (renotify still alerts).
       const n = new Notification(payload.title, {
         body: payload.body || undefined,
@@ -65,6 +93,7 @@ export class DesktopNotificationService implements INotificationService {
         renotify: true,
       } as NotificationOptions);
       n.onclick = () => {
+        stopAlertSound();
         window.focus();
         navigateToDeepLink(payload.deepLinkPath);
         n.close();

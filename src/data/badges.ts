@@ -36,8 +36,10 @@ export type BadgeCategory =
   | 'fasting'
   | 'seasons'
   | 'sadaqah'
+  | 'silat'
   | 'knowledge'
   | 'habits'
+  | 'tazkiya'
   | 'steadfast';
 
 export interface CategoryMeta {
@@ -60,8 +62,10 @@ export const BADGE_CATEGORIES: CategoryMeta[] = [
   { id: 'fasting', label: 'الصيام', hint: 'صيام التطوع', to: '/module/fasting' },
   { id: 'seasons', label: 'المواسم', hint: 'رمضان والعشر والأيام الفاضلة', to: '/calendar' },
   { id: 'sadaqah', label: 'الصدقة', hint: 'العطاء ودوامه', to: '/sadaqah' },
+  { id: 'silat', label: 'صلة الرحم', hint: 'الوالدان والأرحام والجيران', to: '/silat' },
   { id: 'knowledge', label: 'العلم', hint: 'الدروس والأسماء والحديث', to: '/study?tab=circles' },
   { id: 'habits', label: 'العادات والمهام', hint: 'ما ينفعك كل يوم', to: '/study?tab=habits' },
+  { id: 'tazkiya', label: 'التزكية والمحاسبة', hint: 'برامج التدرّج ومحاسبة الجمعة والقضاء', to: '/programs' },
   { id: 'steadfast', label: 'الثبات', hint: 'المداومة على العبادة', to: '/stats' },
 ];
 
@@ -94,6 +98,10 @@ export const UNITS = {
   subjects: ['علم واحد', 'علمان', 'علوم', 'علماً'],
   juz: ['جزء واحد', 'جزءان', 'أجزاء', 'جزءاً'],
   kinds: ['نوع واحد', 'نوعان', 'أنواع', 'نوعاً'],
+  contacts: ['صلة واحدة', 'صلتان', 'صِلات', 'صلة'],
+  visits: ['زيارة واحدة', 'زيارتان', 'زيارات', 'زيارة'],
+  neighbors: ['جار واحد', 'جاران', 'جيران', 'جاراً'],
+  programs: ['برنامج واحد', 'برنامجان', 'برامج', 'برنامجاً'],
 } satisfies Record<string, Forms>;
 export type Unit = keyof typeof UNITS;
 
@@ -105,7 +113,7 @@ interface MetricMeta {
   unit: Unit;
   /** A chain: the best-ever run unlocks it; locked progress shows the live run. */
   streak?: true;
-  audience?: 'male';
+  audience?: 'male' | 'female';
 }
 
 /** Every measure. Computed in services/badgeMetrics.ts (that file must cover each key). */
@@ -129,6 +137,8 @@ export const METRICS = {
   maghrib_streak: { label: 'سلسلة المغرب', cat: 'prayer', unit: 'days', streak: true },
   isha_streak: { label: 'سلسلة العشاء', cat: 'prayer', unit: 'days', streak: true },
   bardain_days: { label: 'البَردان', cat: 'prayer', unit: 'days' },
+  // «برامج التدرّج»: the live attempt's day; a finished run is every day of it
+  program_on_time: { label: 'على أول وقتها', cat: 'prayer', unit: 'days', streak: true, audience: 'female' },
   // السنن والنوافل
   rawatib_full_days: { label: 'السنن الرواتب', cat: 'sunnah', unit: 'days' },
   rawatib_streak: { label: 'سلسلة الرواتب', cat: 'sunnah', unit: 'days', streak: true },
@@ -148,6 +158,7 @@ export const METRICS = {
   mosque_fajr_streak: { label: 'سلسلة الفجر في المسجد', cat: 'mosque', unit: 'days', streak: true, audience: 'male' },
   mosque_fajr_isha_days: { label: 'العشاء والفجر في جماعة', cat: 'mosque', unit: 'days', audience: 'male' },
   jumuah: { label: 'الجمعة', cat: 'mosque', unit: 'fridays', audience: 'male' },
+  program_takbeer: { label: 'التكبيرة الأولى', cat: 'mosque', unit: 'days', streak: true, audience: 'male' },
   // القيام والوتر
   qiyam_streak: { label: 'سلسلة القيام', cat: 'qiyam', unit: 'nights', streak: true },
   qiyam_nights: { label: 'ليالي القيام', cat: 'qiyam', unit: 'nights' },
@@ -156,6 +167,7 @@ export const METRICS = {
   qiyam_witr_streak: { label: 'سلسلة الوتر', cat: 'qiyam', unit: 'nights', streak: true },
   qiyam_eleven: { label: 'إحدى عشرة ركعة', cat: 'qiyam', unit: 'nights' },
   qiyam_last_third: { label: 'الثلث الأخير', cat: 'qiyam', unit: 'nights' },
+  program_qiyam: { label: 'برنامج القيام', cat: 'qiyam', unit: 'nights', streak: true },
   // الأذكار
   dhikr_streak: { label: 'سلسلة الأذكار', cat: 'dhikr', unit: 'days', streak: true },
   dhikr_days: { label: 'أيام الذكر', cat: 'dhikr', unit: 'days' },
@@ -188,12 +200,16 @@ export const METRICS = {
   review_pages: { label: 'صفحات المراجعة', cat: 'quran', unit: 'pages' },
   review_streak: { label: 'سلسلة المراجعة', cat: 'quran', unit: 'days', streak: true },
   review_khatmat: { label: 'ختمات المراجعة', cat: 'quran', unit: 'khatma' },
+  // الحفظ: من جلسات الحفظ والمراجعة في مصحفي — الصفحة محفوظة إذا شملت الجلساتُ آياتها كلها
+  memorized_pages: { label: 'محفوظك', cat: 'quran', unit: 'pages' },
+  memorized_juz: { label: 'أجزاء في صدرك', cat: 'quran', unit: 'juz' },
   quran_types_open: { label: 'نصيب من كل نوع', cat: 'quran', unit: 'kinds' },
   quran_types_done: { label: 'ألوان الختمات', cat: 'quran', unit: 'kinds' },
   day_quran_share: { label: 'يوم النصيبين', cat: 'quran', unit: 'days' },
   hifz_sessions: { label: 'جلسات التسميع', cat: 'quran', unit: 'sessions' },
   hifz_perfect: { label: 'تسميع بلا خطأ', cat: 'quran', unit: 'sessions' },
   hifz_surahs: { label: 'سور متقنة', cat: 'quran', unit: 'surahs' },
+  group_khatmat: { label: 'الختمات الجماعية', cat: 'quran', unit: 'khatma' },
   // الأوراد
   awrad_done: { label: 'الأوراد المكتملة', cat: 'awrad', unit: 'awrad' },
   wird_streak: { label: 'سلسلة الوِرد اليومي', cat: 'awrad', unit: 'days', streak: true },
@@ -216,12 +232,20 @@ export const METRICS = {
   shawwal_fasts: { label: 'ستّ من شوال', cat: 'seasons', unit: 'days' },
   dhulhijjah_fasts: { label: 'عشر ذي الحجة', cat: 'seasons', unit: 'days' },
   friday_full: { label: 'الجمعة المحفوظة', cat: 'seasons', unit: 'fridays' },
+  friday_kahf: { label: 'الكهف يوم الجمعة', cat: 'seasons', unit: 'fridays' },
   // الصدقة
   sadaqah_count: { label: 'الصدقات', cat: 'sadaqah', unit: 'sadaqat' },
   sadaqah_week_streak: { label: 'صدقة كل أسبوع', cat: 'sadaqah', unit: 'weeks', streak: true },
   sadaqah_month_streak: { label: 'صدقة كل شهر', cat: 'sadaqah', unit: 'months', streak: true },
   sadaqah_ramadan: { label: 'صدقات رمضان', cat: 'sadaqah', unit: 'sadaqat' },
   sadaqah_causes: { label: 'أبواب الخير', cat: 'sadaqah', unit: 'sets' },
+  // صلة الرحم (silatBadgeMetrics)
+  silat_kin: { label: 'صلة الأرحام', cat: 'silat', unit: 'contacts' },
+  silat_parent_dua: { label: 'الدعاء للوالدين', cat: 'silat', unit: 'days' },
+  silat_visits: { label: 'الزيارات', cat: 'silat', unit: 'visits' },
+  silat_weeks: { label: 'على العهد', cat: 'silat', unit: 'weeks', streak: true },
+  silat_neighbors: { label: 'الجيران', cat: 'silat', unit: 'neighbors' },
+  silat_reconciled: { label: 'وصل القاطع', cat: 'silat', unit: 'reps' },
   // العلم
   study_lessons: { label: 'الدروس', cat: 'knowledge', unit: 'lessons' },
   study_series: { label: 'السلاسل العلمية', cat: 'knowledge', unit: 'series' },
@@ -233,6 +257,13 @@ export const METRICS = {
   habits_days: { label: 'أيام العادات', cat: 'habits', unit: 'days' },
   habits_streak: { label: 'سلسلة العادات', cat: 'habits', unit: 'days', streak: true },
   tasks_done: { label: 'المهام المنجزة', cat: 'habits', unit: 'tasks' },
+  // التزكية والمحاسبة — القضاء خاصٌّ بصاحبه: أوسمته خفية حتى يبلغها (لا تُقترح على أحد)
+  programs_finished: { label: 'برامج التدرّج', cat: 'tazkiya', unit: 'programs' },
+  program_comebacks: { label: 'العودة إلى البرنامج', cat: 'tazkiya', unit: 'programs' },
+  muhasaba_streak: { label: 'محاسبة الجمعة', cat: 'tazkiya', unit: 'fridays', streak: true },
+  muhasaba_kept: { label: 'الوفاء بالعزم', cat: 'tazkiya', unit: 'weeks' },
+  qada_prayers: { label: 'قضاء الصلوات', cat: 'tazkiya', unit: 'prayers' },
+  qada_ramadan: { label: 'قضاء رمضان', cat: 'tazkiya', unit: 'reps' },
   // الأيام الجامعة
   day_prayer_complete: { label: 'اليوم الكامل', cat: 'days', unit: 'days' },
   day_prayer_complete_streak: { label: 'سلسلة الأيام الكاملة', cat: 'days', unit: 'days', streak: true },
@@ -259,8 +290,8 @@ export interface BadgeDefinition {
   rarity: BadgeRarity;
   metric: BadgeMetric;
   target: number;
-  /** Only offered to this audience (from the metric) — mosque badges are for men. */
-  audience?: 'male';
+  /** Only offered to this audience (from the metric) — mosque badges are for men, «على أول وقتها» for women. */
+  audience?: 'male' | 'female';
   /** A secret: shown as «؟» with `hint` until unlocked. */
   hidden?: boolean;
   hint?: string;
@@ -364,6 +395,7 @@ export const BADGES: BadgeDefinition[] = [
   b('isha_streak_100', 'isha_streak', 100, E, '🌌', 'مئة عشاء', 'مئة يوم متتالٍ من صلاة العشاء'),
   b('bardain_30', 'bardain_days', 30, R, '🌓', 'البَردان', 'ثلاثون يوماً صلّيتَ فيها الفجر والعصر — «من صلّى البَردين دخل الجنة»'),
   b('bardain_100', 'bardain_days', 100, E, '🌗', 'مئة يوم من البَردين', 'مئة يوم حافظتَ فيها على الفجر والعصر'),
+  b('program_on_time_40', 'program_on_time', 40, L, '⏰', 'على أول وقتها', 'أتممتِ برنامج الأربعين: الخمس على أول وقتها أربعين يوماً — «أيّ العمل أحبّ إلى الله؟ قال: الصلاة على وقتها»'),
 
   // ══ السنن والنوافل ═══════════════════════════════════════════════════════
   b('rawatib_full_1', 'rawatib_full_days', 1, C, '🏡', 'بيت في الجنة', 'صلّيتَ السنن الرواتب الاثنتي عشرة في يوم — «بُني له بهنّ بيت في الجنة»'),
@@ -419,6 +451,7 @@ export const BADGES: BadgeDefinition[] = [
   b('jumuah_4', 'jumuah', 4, C, '🕌', 'الجمعة إلى الجمعة', 'أربع جُمَع في المسجد — «والجمعة إلى الجمعة كفّارة لما بينهن»'),
   b('jumuah_12', 'jumuah', 12, R, '🕋', 'اثنتا عشرة جمعة', 'اثنتا عشرة جمعة شهدتها في المسجد'),
   b('jumuah_52', 'jumuah', 52, E, '🗓️', 'عامٌ من الجُمَع', 'اثنتان وخمسون جمعة — «من راح في الساعة الأولى فكأنما قرّب بدنة»'),
+  b('program_takbeer_40', 'program_takbeer', 40, L, '🕌', 'براءةٌ من النار والنفاق', 'أتممتَ أربعين يوماً تدرك فيها التكبيرة الأولى في جماعة — «كُتبت له براءتان: براءةٌ من النار، وبراءةٌ من النفاق»'),
 
   // ══ القيام والوتر ════════════════════════════════════════════════════════
   b('streak_qiyam_3', 'qiyam_streak', 3, C, '🌒', 'ثلاث ليالٍ', 'قمتَ الليل ثلاث ليالٍ متتالية'),
@@ -448,6 +481,7 @@ export const BADGES: BadgeDefinition[] = [
   b('eleven_100', 'qiyam_eleven', 100, E, '🌟', 'مئة ليلة تامة', 'مئة ليلة بإحدى عشرة ركعة فأكثر'),
   b('last_third_1', 'qiyam_last_third', 1, R, '🌌', 'في الثلث الأخير', 'قمتَ في ثلث الليل الآخر — «ينزل ربنا تبارك وتعالى كل ليلة إلى السماء الدنيا حين يبقى ثلث الليل الآخر»', 'لليل ساعةٌ لها شأن…'),
   b('last_third_30', 'qiyam_last_third', 30, E, '🌠', 'المستغفرون بالأسحار', 'ثلاثون ليلة قمتها في الثلث الأخير — «وبالأسحار هم يستغفرون»', 'من عرف تلك الساعة فليداوم…'),
+  b('program_qiyam_30', 'program_qiyam', 30, E, '🪜', 'سُلَّم القيام', 'أتممتَ برنامج القيام من ركعتين إلى إحدى عشرة — «عليكم بقيام الليل فإنه دأب الصالحين قبلكم»'),
 
   // ══ الأذكار والتسبيح ═════════════════════════════════════════════════════
   b('streak_dhikr_7', 'dhikr_streak', 7, C, '📿', 'ذاكر لله', '٧ أيام من أذكار الصباح والمساء'),
@@ -565,6 +599,16 @@ export const BADGES: BadgeDefinition[] = [
   b('review_streak_7', 'review_streak', 7, C, '🔁', 'أسبوع من المراجعة', 'راجعتَ محفوظك سبعة أيام متتالية'),
   b('review_streak_30', 'review_streak', 30, R, '🔁', 'شهر من المراجعة', 'ثلاثون يوماً متتالية تتعاهد فيها حفظك'),
   b('review_streak_100', 'review_streak', 100, E, '🏆', 'مئة يوم من المراجعة', 'مئة يوم متتالٍ لم يتفلّت فيها حفظك'),
+  // محفوظك: جلسات الحفظ والمراجعة في مصحفي
+  b('memorized_1', 'memorized_pages', 1, C, '🌱', 'أول صفحة في صدرك', 'حفظتَ صفحة كاملة — «خيركم من تعلّم القرآن وعلّمه»'),
+  b('memorized_10', 'memorized_pages', 10, C, '🌿', 'عشر صفحات في صدرك', 'عشر صفحات من كتاب الله تحفظها'),
+  b('memorized_50', 'memorized_pages', 50, R, '🌳', 'خمسون صفحة حفظاً', 'خمسون صفحة من المصحف في صدرك'),
+  b('memorized_150', 'memorized_pages', 150, E, '🏔️', 'ربع القرآن في صدرك', 'مئة وخمسون صفحة، ربع المصحف تقريباً'),
+  b('memorized_302', 'memorized_pages', 302, L, '💠', 'نصف القرآن في صدرك', 'نصف المصحف تحفظه — «اقرأ وارتقِ ورتّل كما كنت ترتّل في الدنيا»'),
+  b('memorized_juz_1', 'memorized_juz', 1, R, '📗', 'جزءٌ في صدرك', 'حفظتَ جزءاً كاملاً من القرآن'),
+  b('memorized_juz_5', 'memorized_juz', 5, E, '📚', 'خمسة أجزاء حفظاً', 'خمسة أجزاء كاملة في صدرك'),
+  b('memorized_juz_10', 'memorized_juz', 10, L, '🏛️', 'عشرة أجزاء حفظاً', 'ثلث القرآن في صدرك'),
+  b('memorized_juz_30', 'memorized_juz', 30, M, '👑', 'من أهل الله وخاصّته', 'حفظتَ القرآن كله — «إن لله أهلين من الناس: أهل القرآن هم أهل الله وخاصّته»'),
   // النصيب من كل نوع
   b('types_open_2', 'quran_types_open', 2, C, '🌿', 'نصيبان', 'لك ختمتان جاريتان من نوعين مختلفين'),
   b('types_open_3', 'quran_types_open', 3, R, '🌸', 'ثلاثة أنصبة', 'لك ختمات جارية من ثلاثة أنواع'),
@@ -584,6 +628,9 @@ export const BADGES: BadgeDefinition[] = [
   b('hifz_surah_10', 'hifz_surahs', 10, R, '🌿', 'عشر سور متقنة', 'عشر سور متقنة في مراجعتك'),
   b('hifz_surah_37', 'hifz_surahs', 37, E, '🌳', 'سبع وثلاثون سورة', 'سبع وثلاثون سورة متقنة — بعدد سور جزء عمّ'),
   b('hifz_surah_114', 'hifz_surahs', 114, M, '👑', 'حافظٌ لكتاب الله', 'سور القرآن كلها متقنة في مراجعتك — «بل هو آياتٌ بيّنات في صدور الذين أوتوا العلم»'),
+  b('group_khatma_1', 'group_khatmat', 1, R, '🤝', 'شريك الختمة', 'قرأتَ في ختمة جماعية حتى تمّت — «وتعاونوا على البرّ والتقوى»'),
+  b('group_khatma_5', 'group_khatmat', 5, E, '📖', 'خمس ختمات جماعية', 'خمس ختمات جماعية تمّت ولك فيها نصيب — «اقرؤوا القرآن فإنه يأتي يوم القيامة شفيعاً لأصحابه»'),
+  b('group_khatma_15', 'group_khatmat', 15, L, '📚', 'خمس عشرة ختمة جماعية', 'خمس عشرة ختمة جماعية تمّت ولك في كل منها نصيب'),
 
   // ══ الأوراد ══════════════════════════════════════════════════════════════
   b('awrad_1', 'awrad_done', 1, C, '🎯', 'أول وِرد', 'أتممتَ أول وِرد لك'),
@@ -634,6 +681,10 @@ export const BADGES: BadgeDefinition[] = [
   b('friday_4', 'friday_full', 4, C, '🕌', 'أربع جُمَع محفوظة', 'أربع جُمَع صلّيتَ فيها الخمس وقرأتَ أذكار الصباح والمساء — «خير يوم طلعت عليه الشمس يوم الجمعة»'),
   b('friday_12', 'friday_full', 12, R, '🗓️', 'اثنتا عشرة جمعة محفوظة', 'اثنتا عشرة جمعة محفوظة بالصلوات والأذكار'),
   b('friday_52', 'friday_full', 52, E, '🌟', 'عامٌ من الجُمَع المحفوظة', 'اثنتان وخمسون جمعة محفوظة بالصلوات والأذكار'),
+  b('kahf_1', 'friday_kahf', 1, C, '🔆', 'نور الجمعة', 'قرأتَ سورة الكهف يوم الجمعة — «أضاء له من النور ما بين الجمعتين»'),
+  b('kahf_4', 'friday_kahf', 4, C, '🔆', 'نورٌ ما بين الجمعتين', 'قرأتَ سورة الكهف في أربع جُمَع — «من قرأ سورة الكهف في يوم الجمعة أضاء له من النور ما بين الجمعتين»'),
+  b('kahf_12', 'friday_kahf', 12, R, '💡', 'اثنتا عشرة جمعة مع الكهف', 'قرأتَ سورة الكهف في اثنتي عشرة جمعة'),
+  b('kahf_52', 'friday_kahf', 52, E, '🌟', 'عامٌ مع سورة الكهف', 'اثنتان وخمسون جمعة قرأتَ فيها سورة الكهف'),
 
   // ══ الصدقة ═══════════════════════════════════════════════════════════════
   b('sadaqah_1', 'sadaqah_count', 1, C, '🤲', 'أول صدقة', 'سجّلتَ أول صدقة — «والصدقة تطفئ الخطيئة كما يطفئ الماء النار»'),
@@ -649,6 +700,23 @@ export const BADGES: BadgeDefinition[] = [
   b('sadaqah_ramadan_1', 'sadaqah_ramadan', 1, R, '🌙', 'أجود ما يكون في رمضان', 'تصدّقتَ في رمضان — «وكان أجود ما يكون في رمضان»'),
   b('sadaqah_ramadan_10', 'sadaqah_ramadan', 10, E, '🌙', 'عشر صدقات رمضانية', 'عشر صدقات في رمضان'),
   b('sadaqah_causes_5', 'sadaqah_causes', 5, R, '🚪', 'أبواب الخير', 'تصدّقتَ في خمسة أبواب مختلفة من الخير'),
+
+  // ══ صلة الرحم ════════════════════════════════════════════════════════════
+  b('silat_kin_10', 'silat_kin', 10, C, '🤝', 'واصلُ الرحم', 'عشر صِلات لوالديك وأرحامك بين زيارة واتصال وهدية — «من سرّه أن يُبسط له في رزقه، أو يُنسأ له في أثره، فليصل رحمه»'),
+  b('silat_kin_40', 'silat_kin', 40, R, '💞', 'رحمٌ موصولة', 'أربعون صلة لوالديك وأرحامك — «واتقوا الله الذي تساءلون به والأرحام»'),
+  b('silat_kin_100', 'silat_kin', 100, E, '🌳', 'مئة صلة', 'مئة صلة لوالديك وأرحامك — «الرحم معلّقة بالعرش تقول: من وصلني وصله الله، ومن قطعني قطعه الله»'),
+  b('silat_kin_365', 'silat_kin', 365, L, '🏡', 'عامٌ من الصلة', '٣٦٥ صلة لوالديك وأرحامك، بعدد أيام السنة'),
+  b('parent_dua_7', 'silat_parent_dua', 7, C, '🤲', 'بارٌّ بوالديه', 'دعوتَ لوالديك في سبعة أيام — «وقل ربّ ارحمهما كما ربّياني صغيراً»'),
+  b('parent_dua_30', 'silat_parent_dua', 30, R, '🕊️', 'ربِّ ارحمهما', 'ثلاثون يوماً دعوتَ فيها لوالديك — «وبالوالدين إحساناً»'),
+  b('parent_dua_100', 'silat_parent_dua', 100, E, '🌷', 'ولدٌ صالح يدعو له', 'مئة يوم من الدعاء لوالديك — «إذا مات الإنسان انقطع عنه عمله إلا من ثلاثة… أو ولدٍ صالح يدعو له»'),
+  b('silat_visit_10', 'silat_visits', 10, R, '🚪', 'زائرٌ في الله', 'عشر زيارات لأهلك وأحبابك — «إن الله قد أحبّك كما أحببتَه فيه»'),
+  b('silat_visit_50', 'silat_visits', 50, E, '🏘️', 'خمسون زيارة', 'خمسون زيارة لأهلك وأحبابك وجيرانك'),
+  b('silat_weeks_4', 'silat_weeks', 4, R, '📅', 'على العهد', 'أربعة أسابيع متتالية وصلتَ فيها كل من في قائمتك في موعده'),
+  b('silat_weeks_12', 'silat_weeks', 12, E, '🗓️', 'اثنا عشر أسبوعاً على العهد', 'اثنا عشر أسبوعاً متتالية لم يفُتك فيها موعد صلة — «والذين يصلون ما أمر الله به أن يوصل»'),
+  b('silat_weeks_52', 'silat_weeks', 52, L, '💫', 'عامٌ على العهد', 'اثنان وخمسون أسبوعاً متتالية وصلتَ فيها كل أحبابك في مواعيدهم'),
+  b('neighbors_3', 'silat_neighbors', 3, R, '🏠', 'وصيّة جبريل', 'وصلتَ ثلاثة من جيرانك — «ما زال جبريل يوصيني بالجار حتى ظننتُ أنه سيورّثه»'),
+  b('neighbors_10', 'silat_neighbors', 10, E, '🏘️', 'خير الجيران', 'وصلتَ عشرة من جيرانك — «وخير الجيران عند الله خيرهم لجاره»'),
+  b('reconcile_1', 'silat_reconciled', 1, L, '🕊️', 'الواصلُ الحق', 'وصلتَ مَن انقطع ما بينك وبينه — «ليس الواصل بالمكافئ، ولكن الواصل الذي إذا قُطعت رحمه وصلها»', 'ليس الواصل بالمكافئ…'),
 
   // ══ العلم ════════════════════════════════════════════════════════════════
   b('study_1', 'study_lessons', 1, C, '📘', 'أول درس', 'حضرتَ أول درس — «من سلك طريقاً يلتمس فيه علماً سهّل الله له به طريقاً إلى الجنة»'),
@@ -680,6 +748,24 @@ export const BADGES: BadgeDefinition[] = [
   b('tasks_100', 'tasks_done', 100, R, '📋', 'مئة مهمة', 'أنجزتَ مئة مهمة'),
   b('tasks_500', 'tasks_done', 500, E, '🗂️', 'خمسمئة مهمة', 'خمسمئة مهمة منجزة — «اغتنم خمساً قبل خمس»'),
 
+  // ══ التزكية والمحاسبة (القضاء خفيّ: لا يُقترح على أحد) ══════════════════
+  b('programs_1', 'programs_finished', 1, R, '🪜', 'المتدرّج', 'أتممتَ أول برنامج تدرّج، خطوةً بعد خطوة — «سدّدوا وقاربوا وأبشروا»'),
+  b('programs_3', 'programs_finished', 3, E, '📈', 'ثلاثة برامج', 'أتممتَ ثلاثة برامج تدرّج — «أحبّ الأعمال إلى الله أدومها وإن قلّ»'),
+  b('programs_5', 'programs_finished', 5, E, '🏔️', 'خمسة برامج', 'خمسة برامج أتممتَها حتى صارت العبادة لك دأباً'),
+  b('programs_10', 'programs_finished', 10, L, '👑', 'عشرة برامج', 'عشرة برامج تدرّج أتممتَها — «والذين جاهدوا فينا لنهدينّهم سُبُلنا»'),
+  b('program_comeback_1', 'program_comebacks', 1, R, '🌱', 'من التوّابين', 'أتممتَ برنامجاً تعثّرتَ فيه ثم عدت — «كل ابن آدم خطّاء، وخير الخطّائين التوّابون»', 'لمن تعثّر في برنامجه ثم أتمّه…'),
+  b('muhasaba_4', 'muhasaba_streak', 4, R, '📝', 'محاسِب نفسه', 'حاسبتَ نفسك أربع جُمَع متتالية — «يا أيها الذين آمنوا اتقوا الله ولتنظر نفسٌ ما قدّمت لغد»'),
+  b('muhasaba_12', 'muhasaba_streak', 12, E, '📓', 'اثنتا عشرة محاسبة', 'اثنتا عشرة جمعة متتالية وقفتَ فيها مع نفسك — «قد أفلح من زكّاها»'),
+  b('muhasaba_52', 'muhasaba_streak', 52, L, '📜', 'عامٌ من المحاسبة', 'اثنتان وخمسون جمعة متتالية من المحاسبة — «بل الإنسان على نفسه بصيرة»'),
+  b('kept_3', 'muhasaba_kept', 3, C, '🎯', 'وفّى بعزمه', 'وفّيتَ بعزم أسبوعك ثلاث مرات — «فإذا عزمتَ فتوكّل على الله»'),
+  b('kept_10', 'muhasaba_kept', 10, R, '🏹', 'عشرة عزائم', 'وفّيتَ بعزمك في عشرة أسابيع — «والموفون بعهدهم إذا عاهدوا»'),
+  b('kept_25', 'muhasaba_kept', 25, E, '💎', 'صادق العزم', 'خمسة وعشرون أسبوعاً وفّيتَ فيها بما عزمتَ عليه — «من المؤمنين رجالٌ صدقوا ما عاهدوا الله عليه»'),
+  b('qada_1', 'qada_prayers', 1, C, '🕰️', 'أوّل قضاء', 'قضيتَ أول صلاة فاتتك — «من نسي صلاةً فليصلِّ إذا ذكرها، لا كفّارة لها إلا ذلك»', 'لمن تدارك ما فاته…'),
+  b('qada_100', 'qada_prayers', 100, R, '🕰️', 'مئة صلاة مقضيّة', 'قضيتَ مئة صلاة فاتتك — «فاتقوا الله ما استطعتم»', 'لمن تدارك ما فاته…'),
+  b('qada_500', 'qada_prayers', 500, E, '⏳', 'خمسمئة صلاة مقضيّة', 'خمسمئة صلاة قضيتَها — «إن الله لا يضيع أجر المحسنين»', 'لمن تدارك ما فاته…'),
+  b('qada_1000', 'qada_prayers', 1000, L, '⌛', 'ألف صلاة مقضيّة', 'ألف صلاة أدّيتَ بها ما فاتك — «وإني لغفّارٌ لمن تاب وآمن وعمل صالحاً ثم اهتدى»', 'لمن تدارك ما فاته…'),
+  b('qada_ramadan_1', 'qada_ramadan', 1, E, '🌙', 'قبل رمضان', 'قضيتَ ما فاتك من رمضانٍ كله قبل أن يدخل رمضان الذي بعده — «فعدّةٌ من أيامٍ أُخر»', 'دَينٌ قُضي قبل أجله…'),
+
   // ══ الثبات ═══════════════════════════════════════════════════════════════
   b('streak_overall_3', 'overall_streak', 3, C, '🌱', 'بداية الطريق', 'ثلاثة أيام متتالية من العبادة — والقليل الدائم خير'),
   b('streak_overall_7', 'overall_streak', 7, C, '🌟', 'أسبوع كامل', 'حافظتَ على عبادتك سبعة أيام متتالية'),
@@ -710,7 +796,7 @@ export const BADGE_BY_ID: ReadonlyMap<string, BadgeDefinition> = new Map(BADGES.
 export const categoryOf = (x: BadgeDefinition): BadgeCategory => METRICS[x.metric].cat;
 export const unitOf = (x: BadgeDefinition): Forms => UNITS[METRICS[x.metric].unit];
 
-/** Is the badge offered to this user (mosque badges: men only)? */
+/** Is the badge offered to this user (mosque badges: men only; a women's program: women only)? */
 export const badgeVisible = (x: BadgeDefinition, gender: 'male' | 'female' | null | undefined): boolean =>
   !x.audience || x.audience === gender;
 

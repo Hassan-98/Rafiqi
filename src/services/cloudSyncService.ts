@@ -60,6 +60,12 @@ const NON_SYNCABLE = new Set([
   'myzikr:downloads',
   // Device-local notification plan for study/task reminders.
   'myzikr:study-notif',
+  // «وضع الصلاة»: silences THIS phone; permission + schedule are per device.
+  'myzikr:prayerMode',
+  // «رفيقك اليومي» fatigue ledger: what THIS phone armed and whether it was acted on.
+  'myzikr:engagement',
+  // «تذكرة الإتقان»: settings + when THIS device last showed one.
+  'myzikr:mindful',
 ]);
 
 /**
@@ -154,6 +160,10 @@ const STORE_LOADERS: Record<string, () => Promise<unknown>> = {
   'myzikr:study': () => import('@/store/studyStore').then((m) => m.useStudyStore),
   'myzikr:tasks': () => import('@/store/tasksStore').then((m) => m.useTasksStore),
   'myzikr:house': () => import('@/store/houseStore').then((m) => m.useHouseStore),
+  'myzikr:silat': () => import('@/store/silatStore').then((m) => m.useSilatStore),
+  'myzikr:qada': () => import('@/store/qadaStore').then((m) => m.useQadaStore),
+  'myzikr:programs': () => import('@/store/programsStore').then((m) => m.useProgramsStore),
+  'myzikr:friday-review': () => import('@/store/fridayReviewStore').then((m) => m.useFridayReviewStore),
   'myzikr:quran': () => import('@/store/quranStore').then((m) => m.useQuranStore),
   'myzikr:ramadan': () => import('@/store/ramadanStore').then((m) => m.useRamadanStore),
   'myzikr:sadaqah': () => import('@/store/sadaqahStore').then((m) => m.useSadaqahStore),

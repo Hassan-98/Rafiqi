@@ -1,17 +1,32 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { format, startOfMonth, startOfWeek, subDays } from 'date-fns';
+import { addDays, format, parseISO, startOfMonth, startOfWeek, subDays } from 'date-fns';
 import { supabase, guestClient, isSupabaseConfigured } from '@/services/supabaseClient';
 import { safeStorage } from '@/store/safeStorage';
 import { useAuthStore } from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTargetsStore } from '@/store/targetsStore';
 import { collectBadgeSnapshot, useBadgeMetricsStore } from '@/services/BadgeEngine';
-import { watchSlice } from '@/services/smartNotifications';
+import { rescheduleSmartNotifications, watchSlice } from '@/services/smartNotifications';
 import { SLEEP_ADHKAR } from '@/components/adhkar/adhkarSets';
 import { morningAdhkar, eveningAdhkar, briefAdhkar } from '@/data/adhkar';
-import { scoreDay, type DayScore } from '@/services/leaderboardScore';
+import { scoreDay, type DayScore, type ScoreInput } from '@/services/leaderboardScore';
+import {
+  crownOf,
+  liveCrowns,
+  lostSince,
+  momentKey,
+  winnerOf,
+  type CrownKeys,
+  type CrownPeriod,
+  type Crowns,
+  type Person,
+} from '@/services/crowns';
+import { toast } from '@/store/toastStore';
+import { useNotificationStore } from '@/store/notificationStore';
+import { registerCompanionSource } from '@/services/attention/registry';
+import { raceMoments } from '@/services/raceMoments';
 import type { DhikrItem } from '@/types';
 
 /**
@@ -34,7 +49,8 @@ export interface LbRow {
   /** Participants in the period. */
   total: number;
 }
-export type LbStatus = 'idle' | 'ok' | 'offline' | 'missing';
+/** 'signin': this device took part with a Google account that is signed out now (see `who`). */
+export type LbStatus = 'idle' | 'ok' | 'offline' | 'missing' | 'signin';
 
 interface LbState {
   status: LbStatus;
@@ -45,14 +61,25 @@ interface LbState {
   checkedAt: number;
   /** «سجل الشرف»: a day's final tier (1 / 3 / 10) — recorded the day after. Persisted. */
   honors: Record<string, 1 | 3 | 10>;
+  /** «التيجان»: who leads today / the week / the month right now (crowns.ts). */
+  crowns: Crowns;
+  /** Past winners for the streaks, fetched once a day per identity. Persisted. */
+  crownHist: { at: string; days: (Person | null)[]; weeks: (Person | null)[] } | null;
+  /** Crown moments already shown: `day|2026-11-18` (celebrated), `lost|day|…` (noted). Persisted. */
+  crownMoments: string[];
+  /** The points of #1 and #2 per period at the last check — the gaps in «لحظات الترتيب». */
+  heads: Partial<Record<LbPeriod, { first: number; second: number | null }>>;
 }
 
 export const useLeaderboardStore = create<LbState>()(
-  persist(() => ({ status: 'idle' as LbStatus, mine: {}, top: [] as LbRow[], checkedAt: 0, honors: {} }), {
-    name: 'myzikr:leaderboard',
-    storage: safeStorage,
-    partialize: ({ honors }) => ({ honors }),
-  }),
+  persist(
+    (): LbState => ({ status: 'idle', mine: {}, top: [], checkedAt: 0, honors: {}, crowns: {}, crownHist: null, crownMoments: [], heads: {} }),
+    {
+      name: 'myzikr:leaderboard',
+      storage: safeStorage,
+      partialize: ({ honors, crownHist, crownMoments }) => ({ honors, crownHist, crownMoments }),
+    },
+  ),
 );
 
 // ── dates ──────────────────────────────────────────────────────────────────
@@ -66,32 +93,79 @@ export function periodRange(p: LbPeriod, now = new Date()): [string, string] {
   return [dk(startOfWeek(now, { weekStartsOn: 6 })), dk(now)];
 }
 
+/**
+ * The running week's and month's days BEFORE yesterday (today and yesterday go
+ * up on every push) — the board sums them for «الأسبوع» / «الشهر». Owner
+ * 2026-11-17: «نقاطي الشهرية ٢٨٩٣ والترتيب ٦٩١» — only two days were ever sent.
+ */
+export function backfillDays(now = new Date()): string[] {
+  const from = [periodRange('week', now)[0], periodRange('month', now)[0]].sort()[0];
+  const until = periodRange('yesterday', now)[0];
+  const out: string[] = [];
+  for (let d = parseISO(from); dk(d) < until; d = addDays(d, 1)) out.push(dk(d));
+  return out;
+}
+
 // ── local points ───────────────────────────────────────────────────────────
 const repsOf = (items: DhikrItem[]) => items.reduce((n, it) => n + (it.count || 1), 0);
 
-export function localScore(dateKey: string): DayScore {
-  const brief = useSettingsStore.getState().adhkarBrief;
-  return scoreDay(
-    {
-      ...collectBadgeSnapshot(),
-      targets: useTargetsStore.getState().targets,
-      periods: useTargetsStore.getState().history,
-      setReps: {
-        morning: repsOf(briefAdhkar(morningAdhkar, brief)),
-        evening: repsOf(briefAdhkar(eveningAdhkar, brief)),
-        sleep: repsOf(SLEEP_ADHKAR),
-      },
+function scoreInput(): ScoreInput {
+  return {
+    ...collectBadgeSnapshot(),
+    targets: useTargetsStore.getState().targets,
+    periods: useTargetsStore.getState().history,
+    setReps: {
+      // The FULL sets, «مختصر» or not — the brief set earns its share (owner 2026-11-18).
+      morning: repsOf(morningAdhkar),
+      evening: repsOf(eveningAdhkar),
+      sleep: repsOf(SLEEP_ADHKAR),
     },
-    dateKey,
-  );
+    briefReps: { morning: repsOf(briefAdhkar(morningAdhkar, true)), evening: repsOf(briefAdhkar(eveningAdhkar, true)) },
+  };
+}
+
+export function localScore(dateKey: string): DayScore {
+  return scoreDay(scoreInput(), dateKey);
 }
 
 /** Live points of a day (re-scored whenever the badge metrics republish = any logged deed). */
 export function useDayScore(dateKey: string): DayScore {
   const metrics = useBadgeMetricsStore((s) => s.metrics);
-  const brief = useSettingsStore((s) => s.adhkarBrief);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- metrics/brief are the change triggers
-  return useMemo(() => localScore(dateKey), [metrics, brief, dateKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- metrics is the change trigger
+  return useMemo(() => localScore(dateKey), [metrics, dateKey]);
+}
+
+/** How far back «سباقك مع نفسك» looks: a whole month + the six full months before it (31 + 184). */
+export const HISTORY_DAYS = 215;
+let totalsCache: { metrics: unknown; byEnd: Map<string, Record<string, number>> } | null = null;
+
+/**
+ * Every day's points over the HISTORY_DAYS ending at `now` (today, or the last
+ * day of a month browsed in «الترتيب») from ONE snapshot — the self-race, the
+ * harvest and the evening nudge share it, and it is re-scored only when the
+ * metrics republish or the day turns.
+ */
+export function localTotals(now = new Date()): Record<string, number> {
+  const metrics = useBadgeMetricsStore.getState().metrics;
+  const end = dk(now);
+  if (totalsCache?.metrics !== metrics) totalsCache = { metrics, byEnd: new Map() };
+  const hit = totalsCache.byEnd.get(end);
+  if (hit) return hit;
+  const input = scoreInput();
+  const totals: Record<string, number> = {};
+  for (let i = 0; i < HISTORY_DAYS; i++) {
+    const k = dk(subDays(now, i));
+    totals[k] = scoreDay(input, k).total;
+  }
+  totalsCache.byEnd.set(end, totals);
+  return totals;
+}
+
+/** localTotals, live — up to today, or up to `end`. */
+export function useLocalTotals(end?: Date): Record<string, number> {
+  const metrics = useBadgeMetricsStore((s) => s.metrics);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- metrics is the change trigger
+  return useMemo(() => localTotals(end), [metrics, end]);
 }
 
 // ── server ─────────────────────────────────────────────────────────────────
@@ -105,11 +179,13 @@ function fail(e: { code?: string; message?: string }): null {
 }
 
 type Db = typeof supabase;
-interface Who {
+export interface Who {
   db: Db;
   uid: string;
 }
 let signingIn: Promise<Who | null> | null = null;
+/** Device-local (not `myzikr:*`, never synced): this device has taken part as a Google account. */
+const TOOK_PART_AS_GOOGLE = 'rafiqi-lb-google';
 /** Anonymous sign-ins off in the dashboard: don't knock on every logged deed. */
 let guestOffUntil = 0;
 
@@ -118,11 +194,31 @@ let guestOffUntil = 0;
  * devices), otherwise this device's anonymous guest — created on first use, so
  * no sign-in is ever needed. Never creates a guest for someone who left the board.
  */
-async function who(): Promise<Who | null> {
+export async function who(): Promise<Who | null> {
   // Before the stored Google session is restored, a signed-in user looks like a guest.
   if (!isSupabaseConfigured || !useAuthStore.getState().ready) return null;
   const user = useAuthStore.getState().user;
-  if (user) return { db: supabase, uid: user.id };
+  if (user) {
+    try {
+      localStorage.setItem(TOOK_PART_AS_GOOGLE, '1');
+    } catch {
+      /* private mode: no guard, as before */
+    }
+    return { db: supabase, uid: user.id };
+  }
+  // A device that took part with its Google account never falls back to a guest:
+  // after a sign-out or an expired session the same days went up again under a
+  // new guest (owner 2026-11-18: «شيم» twice, identical points). Sign in instead.
+  let tookPartAsGoogle = false;
+  try {
+    tookPartAsGoogle = !!localStorage.getItem(TOOK_PART_AS_GOOGLE);
+  } catch {
+    /* ignore */
+  }
+  if (tookPartAsGoogle) {
+    useLeaderboardStore.setState({ status: 'signin' });
+    return null;
+  }
   const db = guestClient() as unknown as Db;
   const { data } = await db.auth.getSession();
   if (data.session) return { db, uid: data.session.user.id };
@@ -155,10 +251,14 @@ async function retireGuest(): Promise<void> {
 }
 
 /** The ranking of a period: top `limit` + the caller's row. null = unavailable (see status). */
-export async function fetchBoard(p: LbPeriod, limit = 50): Promise<LbRow[] | null> {
+export function fetchBoard(p: LbPeriod, limit = 50): Promise<LbRow[] | null> {
+  const [from, to] = periodRange(p);
+  return fetchRange(from, to, limit);
+}
+
+export async function fetchRange(from: string, to: string, limit: number): Promise<LbRow[] | null> {
   const id = await who();
   if (!id) return null;
-  const [from, to] = periodRange(p);
   try {
     const { data, error } = await id.db.rpc('leaderboard', { p_from: from, p_to: to, p_limit: limit });
     if (error) return fail(error);
@@ -171,25 +271,93 @@ export async function fetchBoard(p: LbPeriod, limit = 50): Promise<LbRow[] | nul
   }
 }
 
-/** The caller's standing in every period (+ yesterday's tier into «سجل الشرف»). */
+/** The caller's standing in every period (+ yesterday's tier into «سجل الشرف», + the crowns). */
 export async function refreshMine(force = false): Promise<void> {
   const st = useLeaderboardStore.getState();
   if (!force && Date.now() - st.checkedAt < 60_000) return;
   useLeaderboardStore.setState({ checkedAt: Date.now() });
   const periods: LbPeriod[] = ['today', 'yesterday', 'week', 'month'];
-  const boards = await Promise.all(periods.map((p) => fetchBoard(p, p === 'today' ? 3 : 0)));
+  // Top two everywhere (top three today, for Home): #1, the lead over #2, the field size.
+  const boards = await Promise.all(periods.map((p) => fetchBoard(p, p === 'today' ? 3 : 2)));
   if (boards.some((b) => b === null)) return;
-  const top = boards[0]!.filter((r) => r.rank <= 3).slice(0, 3);
+  const [today, yesterday, week, month] = boards as LbRow[][];
+  const top = today.filter((r) => r.rank <= 3).slice(0, 3);
   const mine: LbState['mine'] = {};
-  periods.forEach((p, i) => (mine[p] = boards[i]!.find((r) => r.isMe) ?? null));
+  const heads: LbState['heads'] = {};
+  periods.forEach((p, i) => {
+    mine[p] = boards[i]!.find((r) => r.isMe) ?? null;
+    const [a, b] = [...boards[i]!].sort((x, y) => y.points - x.points);
+    if (a) heads[p] = { first: a.points, second: b?.points ?? null };
+  });
   const y = mine.yesterday;
   const tier = y ? tierOf(y) : null;
   const yKey = periodRange('yesterday')[0];
-  useLeaderboardStore.setState((s) => ({
+
+  const keys = crownKeys();
+  const hist = await crownHistory(keys.day);
+  const crowns: Crowns = {};
+  const put = (p: CrownPeriod, rows: LbRow[], past: (Person | null)[]) => {
+    const c = crownOf(rows, keys[p], past);
+    if (c) crowns[p] = c;
+  };
+  put('day', today, [winnerOf(yesterday), ...(hist?.days ?? [])]);
+  put('week', week, hist?.weeks ?? []);
+  put('month', month, []);
+
+  // A crown I held this period and lost just now: one gentle note per period.
+  const s = useLeaderboardStore.getState();
+  const lost = lostSince(liveCrowns(s.crowns, keys), crowns, keys).filter((p) => !s.crownMoments.includes(`lost|${momentKey(p, keys[p])}`));
+  if (lost.length) {
+    const where = lost.length === 3 ? 'في اليوم والأسبوع والشهر' : lost.map((p) => CROWN_WHERE[p]).join(' و');
+    toast.info(`تقدّم غيرك ${where}`, 'ما زال في الوقت متّسع، والسباق إلى الخير لا ينتهي');
+  }
+
+  useLeaderboardStore.setState((s2) => ({
     mine,
+    heads,
     top,
-    honors: tier && s.honors[yKey] !== tier ? { ...s.honors, [yKey]: tier } : s.honors,
+    crowns,
+    crownHist: hist ?? s2.crownHist,
+    crownMoments: lost.length ? [...s2.crownMoments, ...lost.map((p) => `lost|${momentKey(p, keys[p])}`)].slice(-40) : s2.crownMoments,
+    honors: tier && s2.honors[yKey] !== tier ? { ...s2.honors, [yKey]: tier } : s2.honors,
   }));
+}
+
+const CROWN_WHERE: Record<CrownPeriod, string> = { day: 'اليوم', week: 'في الأسبوع', month: 'في الشهر' };
+
+/** The first day of each running period — a crown is void once its key is not the current one. */
+export function crownKeys(now = new Date()): CrownKeys {
+  return { day: periodRange('today', now)[0], week: periodRange('week', now)[0], month: periodRange('month', now)[0] };
+}
+
+/**
+ * The winners of the six days before yesterday and the three weeks before this
+ * one, for the streaks — fetched once a day per identity (they barely move),
+ * kept across launches. ponytail: a streak longer than the window shows as ×٨ / ×٤.
+ */
+async function crownHistory(day: string): Promise<LbState['crownHist']> {
+  const id = await who();
+  if (!id) return null;
+  const at = `${day}|${id.uid}`;
+  const had = useLeaderboardStore.getState().crownHist;
+  if (had?.at === at) return had;
+  const now = parseISO(day);
+  const ws = parseISO(periodRange('week', now)[0]);
+  const ranges: [string, string][] = [
+    ...[2, 3, 4, 5, 6, 7].map((n): [string, string] => [dk(subDays(now, n)), dk(subDays(now, n))]),
+    ...[1, 2, 3].map((n): [string, string] => [dk(subDays(ws, 7 * n)), dk(subDays(ws, 7 * n - 6))]),
+  ];
+  const boards = await Promise.all(ranges.map(([from, to]) => fetchRange(from, to, 2)));
+  if (boards.some((b) => b === null)) return null;
+  const w = boards.map((b) => winnerOf(b!));
+  return { at, days: w.slice(0, 6), weeks: w.slice(6) };
+}
+
+/** The crowns of the running periods (none while out of the board). */
+export function useCrowns(): Crowns {
+  const crowns = useLeaderboardStore((s) => s.crowns);
+  const join = useSettingsStore((s) => s.leaderboardJoin);
+  return useMemo(() => (join ? liveCrowns(crowns, crownKeys()) : {}), [crowns, join]);
 }
 
 /** 1 / 3 / 10 — only where enough people compete for the place to mean something. */
@@ -218,6 +386,10 @@ export function bestStanding(mine: LbState['mine']): Standing | null {
 
 let lastSig = '';
 let leftFor = '';
+/** Older days already on the board (`uid|day` → points), so a re-push skips them. */
+const backSent: Record<string, number> = {};
+/** The server refused older days (window not widened yet / offline): retry next launch. */
+let backBlocked = '';
 
 /** Upload today's and yesterday's totals (when taking part — no account needed). */
 export async function pushScores(): Promise<void> {
@@ -233,7 +405,7 @@ export async function pushScores(): Promise<void> {
     if (!a.error && !b.error) {
       leftFor = uid;
       lastSig = '';
-      useLeaderboardStore.setState({ mine: {}, top: [] });
+      useLeaderboardStore.setState({ mine: {}, top: [], crowns: {}, heads: {} });
     }
     return;
   }
@@ -262,6 +434,19 @@ export async function pushScores(): Promise<void> {
     if (d.error?.code === '23514') d = await up(days.map((x) => ({ ...x, points: Math.min(600, x.points) })));
     if (d.error) return void fail(d.error);
     lastSig = sig;
+    // The rest of the week and month — needs the write window of
+    // supabase/migrations/20261118130000_leaderboard_backfill.sql; before it the
+    // server refuses quietly and today/yesterday (above) still went up.
+    if (backBlocked !== uid) {
+      const back = backfillDays()
+        .map((day) => ({ user_id: uid, day, points: localScore(day).total }))
+        .filter((x) => x.points > 0 && backSent[`${uid}|${x.day}`] !== x.points);
+      if (back.length) {
+        const b = await up(back);
+        if (b.error) backBlocked = uid;
+        else for (const x of back) backSent[`${uid}|${x.day}`] = x.points;
+      }
+    }
     await refreshMine(true);
   } catch (e) {
     fail(e as Error);
@@ -278,6 +463,27 @@ export async function refreshBoard(): Promise<void> {
   await pushScores();
 }
 
+// «لحظات الترتيب» (raceMoments.ts): the self-race evening, a crown at stake, Saturday's new week —
+// a «رفيقك اليومي» source, registered here (not in attention/plugins.ts) so the notification
+// engine never imports the board and its Supabase client.
+registerCompanionSource({
+  id: 'race',
+  nudges: (ctx) => {
+    if (useNotificationStore.getState().smart?.race === false) return [];
+    const lb = useLeaderboardStore.getState();
+    return raceMoments({
+      now: ctx.now,
+      totals: localTotals(ctx.now),
+      board: useSettingsStore.getState().leaderboardJoin && lb.status === 'ok',
+      checkedAt: lb.checkedAt,
+      mine: lb.mine,
+      heads: lb.heads,
+      isha: ctx.times?.isha ?? null,
+      female: ctx.gender === 'female',
+    });
+  },
+});
+
 let started = false;
 
 /** Keep the board in step: re-score on any logged deed, prefs, sign-in, resume. Call once at boot. */
@@ -289,18 +495,26 @@ export function startLeaderboardSync(debounceMs = 3000): () => void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void pushScores(), debounceMs);
   };
+  // «لحظات الترتيب» (services/raceMoments.ts) read my points and places: re-plan when they move.
+  let moments: ReturnType<typeof setTimeout> | null = null;
+  const replan = () => {
+    if (moments) clearTimeout(moments);
+    moments = setTimeout(() => void rescheduleSmartNotifications(), 5000);
+  };
   const unsubs = [
+    watchSlice(useLeaderboardStore, (s) => JSON.stringify([s.status, s.heads, ...(['today', 'week', 'month'] as const).map((p) => s.mine[p]?.rank)]), replan),
+    watchSlice(useBadgeMetricsStore, (s) => s.metrics, replan),
     // BadgeEngine republishes after every data change (debounced) — one signal for every store.
     watchSlice(useBadgeMetricsStore, (s) => s.metrics, kick),
     watchSlice(useAuthStore, (s) => `${s.ready}|${s.user?.id}`, () => {
       lastSig = '';
-      useLeaderboardStore.setState({ mine: {}, top: [], checkedAt: 0 });
+      useLeaderboardStore.setState({ mine: {}, top: [], crowns: {}, heads: {}, checkedAt: 0 });
       if (useAuthStore.getState().user) void retireGuest().catch(() => undefined);
       kick();
     }),
     watchSlice(
       useSettingsStore,
-      (s) => `${s.userName}|${s.leaderboardJoin}|${s.leaderboardHideName}|${s.adhkarBrief}`,
+      (s) => `${s.userName}|${s.leaderboardJoin}|${s.leaderboardHideName}`,
       kick,
     ),
   ];
@@ -314,6 +528,7 @@ export function startLeaderboardSync(debounceMs = 3000): () => void {
     document.removeEventListener('visibilitychange', onVisible);
     clearInterval(tick);
     if (timer) clearTimeout(timer);
+    if (moments) clearTimeout(moments);
     started = false;
   };
 }

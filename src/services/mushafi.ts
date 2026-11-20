@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { format } from 'date-fns';
-import { khatmaState, mushafiToday, useMushafiStore, type MushafiRemote } from '@/store/mushafiStore';
+import { khatmaState, mushafiToday, useMushafiStore, type MushafiRemote, type MushafiSession } from '@/store/mushafiStore';
 import { useQuranStore } from '@/store/quranStore';
 import { useProgressStore } from '@/store/progressStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -17,11 +17,12 @@ const SYNC_URL = 'https://mushaf-sync.vercel.app/api/sync';
 let inFlight: Promise<boolean> | null = null;
 
 /**
- * Read-only pull: posting just the code merges nothing into the server's copy
- * (and costs no write there) — it answers with the merged state of every device.
+ * Pull: posting just the code merges nothing into the server's copy (and costs no
+ * write there) — it answers with the merged state of every device. Sessions recorded
+ * here (`pending`) ride along; مصحفي gets them on its next sync.
  */
 export function pullMushafi(): Promise<boolean> {
-  const { code } = useMushafiStore.getState();
+  const { code, pending } = useMushafiStore.getState();
   if (!code) return Promise.resolve(false);
   if (inFlight) return inFlight;
   useMushafiStore.getState().setStatus('syncing');
@@ -30,13 +31,15 @@ export function pullMushafi(): Promise<boolean> {
       const r = await fetch(SYNC_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify(pending.length ? { code, sessions: pending } : { code }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const remote = (await r.json()) as MushafiRemote;
       // Unlinked while the request was out? Drop the answer.
       if (useMushafiStore.getState().code !== code) return false;
       useMushafiStore.getState().apply(remote, Date.now());
+      // A server without sessions answers none: what we sent wasn't kept — send it again later.
+      if (Array.isArray(remote.sessions)) useMushafiStore.getState().sent(pending);
       projectToQuran();
       return true;
     } catch {
@@ -108,6 +111,13 @@ export function projectToQuran(now = new Date()) {
   const rate = Math.min(1, t.achieved / t.goal);
   const had = useProgressStore.getState().dailyProgress[today]?.modules.find((x) => x.moduleId === 'quran')?.completionRate ?? 0;
   if (rate > had) useProgressStore.getState().setModuleRate('quran', rate, today);
+}
+
+/** Record sessions (or deletions) made here and send them now — after a pull already out, if one is. */
+export async function saveMushafiSessions(xs: MushafiSession[]): Promise<boolean> {
+  useMushafiStore.getState().addSessions(xs);
+  if (inFlight) await inFlight;
+  return pullMushafi();
 }
 
 let lastPull = 0;

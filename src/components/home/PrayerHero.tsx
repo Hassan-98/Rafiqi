@@ -199,6 +199,55 @@ function PrayerPath({ times, next, onAccent }: { times: PrayerTimesResult; next:
 }
 
 /**
+ * «مضى على الأذان» and «الإقامة بعد» as two clocks you can read at a glance
+ * (owner 2026-11-17: the one-line version buried the times), the way to the
+ * iqama as a bar; «حان وقت الإقامة» for ten minutes after it.
+ */
+function PrayerClock({ elapsed, toIqama, total }: { elapsed: number; toIqama: number | null; total: number }) {
+  const waiting = toIqama != null && toIqama > 0;
+  const due = toIqama != null && toIqama <= 0 && toIqama > -10 * 60;
+  const tile = 'flex-1 min-w-0 rounded-xl px-3 py-2 flex flex-col gap-1';
+  return (
+    <div className="mt-2.5 flex flex-col gap-2">
+      <div className="flex gap-2">
+        <div className={`${tile} bg-on-accent/10`}>
+          <span className="inline-flex items-center gap-1 text-[11px] text-on-accent/75">
+            <Timer size={12} aria-hidden /> مضى على الأذان
+          </span>
+          <span className="self-start font-counter text-[24px] font-bold leading-none tabular-nums" dir="ltr">
+            {elapsedLabel(elapsed)}
+          </span>
+        </div>
+        {waiting ? (
+          <div className={`${tile} bg-gold-light/15 ring-1 ring-gold-light/40`}>
+            <span className="text-[11px] font-semibold text-gold-light">الإقامة بعد</span>
+            <span className="self-start font-counter text-[24px] font-bold leading-none tabular-nums text-gold-light" dir="ltr">
+              {elapsedLabel(toIqama)}
+            </span>
+          </div>
+        ) : due ? (
+          <div className={`${tile} justify-center items-center bg-gold-light text-teal-dark`}>
+            <span className="text-[15px] font-bold">حان وقت الإقامة</span>
+          </div>
+        ) : null}
+      </div>
+      {waiting && total > 0 ? (
+        <div
+          role="progressbar"
+          aria-label="الوقت إلى الإقامة"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={Math.min(total, elapsed)}
+          className="h-1.5 rounded-full bg-on-accent/15 overflow-hidden"
+        >
+          <div className="h-full rounded-full bg-gold-light" style={{ width: `${Math.min(100, (elapsed / total) * 100)}%` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * «الآن» — the one next step for the prayer whose time is running: log it
  * (in the mosque, for men), then its أذكار, then its sunnah after; done once
  * all are in. Hidden before Fajr and on an excused day.
@@ -229,25 +278,12 @@ function NowStep({ times }: { times: PrayerTimesResult }) {
   let kicker: string;
   let title: string;
   let line: ReactNode = null;
+  let clock: ReactNode = null;
   let actions: ReactNode;
   if (!e?.fard) {
     kicker = 'وقتها الآن';
     title = `صلاة ${name}`;
-    line = (
-      <span className="inline-flex flex-wrap items-center gap-x-1.5 font-counter">
-        <Timer size={12} aria-hidden className="text-gold-light" />
-        مضى على الأذان <b className="tabular-nums" dir="ltr">{elapsedLabel(elapsed)}</b>
-        {toIqama != null && toIqama > 0 ? (
-          <>
-            <span aria-hidden>—</span> الإقامة بعد <b className="tabular-nums text-gold-light" dir="ltr">{elapsedLabel(toIqama)}</b>
-          </>
-        ) : toIqama != null && toIqama > -10 * 60 ? (
-          <>
-            <span aria-hidden>—</span> <b className="text-gold-light">حان وقت الإقامة</b>
-          </>
-        ) : null}
-      </span>
-    );
+    clock = <PrayerClock elapsed={elapsed} toIqama={toIqama} total={iqama.enabled ? iqamaMinutes(iqama, cur) * 60 : 0} />;
     actions = (
       <>
         <HapticPressable haptic="medium" onClick={() => logIt(dateKey, cur, 'fard', true, name)} className={primary}>
@@ -306,6 +342,7 @@ function NowStep({ times }: { times: PrayerTimesResult }) {
         <p className="text-[11px] text-gold-light font-bold">{kicker}</p>
         <p className="font-display text-[19px] font-bold leading-tight">{title}</p>
         {line ? <p className="mt-1 text-[11.5px] text-on-accent/80 leading-relaxed">{line}</p> : null}
+        {clock}
       </div>
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
     </div>
