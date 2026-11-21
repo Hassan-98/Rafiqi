@@ -195,7 +195,11 @@ let guestOffUntil = 0;
  * Never a real participant: the dev server (vite) or a browser driven by a
  * test (headless Chrome/CDP, Playwright → navigator.webdriver). Owner
  * 2026-11-21: a dev guest «حسن» and nameless test guests showed up as people.
- * Such a client makes no new guest, uploads nothing, and takes a guest's rows down.
+ * Such a client makes no new guest, uploads nothing, and takes a guest's rows down
+ * after giving it the TEST MARK — user metadata {"test": true}, hidden from the board
+ * and deleted in one line (supabase/migrations/20261121120000_leaderboard_client.sql,
+ * supabase/audit/leaderboard_participants.sql). Scripts that touch the live
+ * project sign up with the same mark: `signInAnonymously({ options: { data: { test: true } } })`.
  */
 const NOT_REAL = import.meta.env.DEV || (typeof navigator !== 'undefined' && navigator.webdriver === true);
 
@@ -415,6 +419,8 @@ export async function pushScores(): Promise<void> {
   const { db, uid } = id;
   if (!leaderboardJoin || (NOT_REAL && db !== supabase)) {
     if (leftFor === uid) return;
+    // A dev/test guest carries the TEST MARK, so the owner's audit can delete the account itself.
+    if (NOT_REAL) await db.auth.updateUser({ data: { test: true } }).catch(() => undefined);
     // Off = gone from the board: delete every row of ours.
     const a = await db.from('leaderboard_days').delete().eq('user_id', uid);
     const b = await db.from('leaderboard_profiles').delete().eq('user_id', uid);
