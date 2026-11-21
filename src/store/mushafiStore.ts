@@ -240,6 +240,25 @@ export function noteTops(tops: RibbonTops, khatmas: MushafiKhatma[], marks: Mush
   return out;
 }
 
+/**
+ * The day khatma `k`'s ribbon was first seen past each of its pages (index = page),
+ * up to `top`: pages it stood past when first seen → that first day (done by then).
+ * Without a ribbon log, nothing is known. Running max: a ribbon moved back doesn't un-pass.
+ */
+function passDays(k: MushafiKhatma, rec: Record<string, number> | undefined, top: number): (string | undefined)[] {
+  const out: (string | undefined)[] = [];
+  if (!rec) return out;
+  const seen = Object.keys(rec).filter((d) => d !== '_base').sort();
+  let p = k.b + 1;
+  for (; p <= Math.min(rec._base, top) && seen[0]; p++) out[p] = seen[0];
+  let max = 0;
+  for (const d of seen) {
+    max = Math.max(max, rec[d]);
+    for (; p <= Math.min(max, top); p++) out[p] = d;
+  }
+  return out;
+}
+
 export function quranTypeStats(
   days: Record<string, number[]>,
   khatmas: MushafiKhatma[],
@@ -258,17 +277,39 @@ export function quranTypeStats(
       else pageDays.set(p, [d]);
     }
   }
-  for (const k of khatmas) {
-    if (k.del) continue;
-    const st = khatmaState(k, marks, today);
+  const live = khatmas.filter((k) => !k.del).map((k) => ({ k, st: khatmaState(k, marks, today) }));
+  const passes = live.map(({ k, st }) => ({ id: k.id, at: passDays(k, tops?.[k.id], st.top) }));
+  /**
+   * The reading log has no khatma on it: one day's page belongs to the khatma that
+   * passed it FIRST (owner 2026-11-21: 48 pages listened scored 10 — the reading
+   * khatma, ahead of the listening one, had logged them days before, and they were
+   * credited to those days). So a khatma's page takes only a log after every other
+   * khatma that passed it earlier, none after its own ribbon passed it, and none
+   * from before its ribbon came within `near` pages of it (read ahead, see below).
+   */
+  const logDay = (k: MushafiKhatma, own: (string | undefined)[], base: number | undefined, near: number, p: number) => {
+    const mine = own[p];
+    let after = '';
+    for (const o of passes) {
+      const d = o.id === k.id ? undefined : o.at[p];
+      if (d && (!mine || d < mine) && d > after) after = d;
+    }
+    // Pages it stood past when first seen were passed at an unknown time: no bound from them.
+    const close = base !== undefined && p - near > base ? own[p - near] : undefined;
+    return pageDays
+      .get(p)
+      ?.find((x) => x >= k.s && x > after && (!mine || x <= mine) && (!close || x >= close) && (!k.f || x <= k.f));
+  };
+  for (const [i, { k, st }] of live.entries()) {
     const t = out[st.type];
     t.pages += st.done;
     if (k.f || !st.live) t.finished++;
     else t.running.push(st);
     // A page is dated by the reading log; failing that, by the day the ribbon was seen past it.
     const rec = tops?.[k.id];
-    const seen = rec ? Object.keys(rec).filter((d) => d !== '_base').sort() : [];
-    const ribbonDay = (p: number) => (rec && p > rec._base ? seen.find((d) => rec[d] >= p) : undefined);
+    const own = passes[i].at;
+    const near = Math.max(40, 2 * st.share);
+    const ribbonDay = (p: number) => (rec && p > rec._base ? own[p] : undefined);
     const byRibbon: Record<string, number> = {};
     const ribbonPages: Record<string, number[]> = {};
     const credit = (d: string, p: number) => {
@@ -276,7 +317,7 @@ export function quranTypeStats(
       (t.pagesOn[d] ??= new Set()).add(p);
     };
     for (let p = k.b + 1; p <= st.top; p++) {
-      const logged = pageDays.get(p)?.find((x) => x >= k.s && (!k.f || x <= k.f));
+      const logged = logDay(k, own, rec?._base, near, p);
       if (logged) credit(logged, p);
       else {
         const d = ribbonDay(p);
@@ -286,16 +327,14 @@ export function quranTypeStats(
         }
       }
     }
-    // A hand-moved ribbon dates at most a heavy day — two days of the plan, two juz at least.
-    // More on the khatma's FIRST day = a khatma entered after it was read (owner 2026-11-17: one
-    // finished two weeks earlier, logged today, scored a whole khatma in a day) → nothing; on a
-    // later day = catching up → the cap. The reading log is never capped.
-    const cap = Math.max(40, 2 * Math.ceil(st.total / Math.max(1, k.d)));
+    // No daily ceiling (owner 2026-11-21: «ممكن أسمع ١٠٠ صفحة أو أكثر») — except a jump past
+    // two days of the plan (two juz at least) on the khatma's FIRST day: a khatma entered after it
+    // was read (owner 2026-11-17: one finished two weeks earlier, logged today, scored a whole
+    // khatma in a day) → nothing.
+    const firstDayMax = Math.max(40, 2 * Math.ceil(st.total / Math.max(1, k.d)));
     for (const [d, n] of Object.entries(byRibbon)) {
-      const got = n <= cap ? n : d === k.s ? 0 : cap;
-      if (!got) continue;
-      t.days[d] = (t.days[d] ?? 0) + got;
-      // ponytail: capped, it isn't known WHICH pages were read — all of them count as the khatma's that day
+      if (d === k.s && n > firstDayMax) continue;
+      t.days[d] = (t.days[d] ?? 0) + n;
       for (const p of ribbonPages[d]) (t.pagesOn[d] ??= new Set()).add(p);
     }
     // Pages read just AHEAD of the ribbon count on the day they were read (owner:
@@ -304,9 +343,9 @@ export function quranTypeStats(
     // on Friday) doesn't. Each page still counts once: past the ribbon it's dated
     // by the loop above, to the same day.
     if (st.live) {
-      const ahead = Math.min(st.total + k.b, st.top + Math.max(40, 2 * st.share));
+      const ahead = Math.min(st.total + k.b, st.top + near);
       for (let p = st.top + 1; p <= ahead; p++) {
-        const d = pageDays.get(p)?.find((x) => x >= k.s);
+        const d = logDay(k, own, rec?._base, near, p);
         if (d) credit(d, p);
       }
     }

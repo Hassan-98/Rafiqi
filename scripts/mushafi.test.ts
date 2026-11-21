@@ -132,19 +132,44 @@ assert.equal(s.end, 24);
   assert.equal(quranTypeStats(read, old, ribbon(604), '2026-11-17', t3).tilawa.days['2026-11-17'], 70);
 }
 
-// Later days: a ribbon catch-up counts up to two days of the plan (30 days → 21/day → 42).
+// Later days: no ceiling on what the ribbon dates (owner 2026-11-21: 100 pages heard and more).
 {
   const ks = [k({ id: 'd', m: 'r1', s: '2026-11-01' })];
   let t = noteTops({}, ks, ribbon(1), '2026-11-01');
   t = noteTops(t, ks, ribbon(36), '2026-11-02'); // 35 pages: a normal heavy day
-  t = noteTops(t, ks, ribbon(336), '2026-11-03'); // 300 pages in a day: capped
+  t = noteTops(t, ks, ribbon(336), '2026-11-03'); // 300 pages in a day: all of them
   const st = quranTypeStats({}, ks, ribbon(336), '2026-11-03', t);
-  assert.deepEqual(st.tilawa.days, { '2026-11-02': 35, '2026-11-03': 42 });
+  assert.deepEqual(st.tilawa.days, { '2026-11-02': 35, '2026-11-03': 300 });
   // A short plan reads more a day: 10 days → 61/day → up to 122.
   const short = [k({ id: 'e', m: 'r1', s: '2026-11-01', d: 10 })];
   let t4 = noteTops({}, short, ribbon(1), '2026-11-01');
   t4 = noteTops(t4, short, ribbon(101), '2026-11-02');
   assert.equal(quranTypeStats({}, short, ribbon(101), '2026-11-02', t4).tilawa.days['2026-11-02'], 100);
+}
+
+// Two khatmas over the same pages (owner 2026-11-21: 48 pages listened scored 10): the reading
+// khatma, ahead, logged them days before — those days are ITS; the listening is dated today.
+{
+  const range = (a: number, z: number) => Array.from({ length: z - a + 1 }, (_, i) => a + i);
+  const marks = [
+    { id: 'r1', p: 1, name: 'تلاوتي', color: '#000000', t: 1 },
+    { id: 'r2', p: 1, name: 'استماعي', color: '#000000', t: 1 },
+  ];
+  const at = (read: number, heard: number) => [{ ...marks[0], p: read }, { ...marks[1], p: heard }];
+  const ks = [k({ id: 'read', m: 'r1', s: '2026-11-01' }), k({ id: 'hear', m: 'r2', s: '2026-11-01', ty: 'listen' })];
+  let t = noteTops({}, ks, at(1, 1), '2026-11-01');
+  t = noteTops(t, ks, at(41, 1), '2026-11-03'); // read 1–40 (logged), the listening still at the start
+  t = noteTops(t, ks, at(41, 41), '2026-11-05'); // heard 1–40, screen off but one page
+  const days = { '2026-11-03': range(1, 40), '2026-11-05': [35] };
+  const st = quranTypeStats(days, ks, at(41, 41), '2026-11-05', t);
+  assert.deepEqual(st.tilawa.days, { '2026-11-03': 40 });
+  assert.deepEqual(st.listen.days, { '2026-11-05': 40 }, 'all of it on the listening day — not the reading day');
+  // A page read far ahead of a ribbon (40+ pages) isn't that khatma's, even once it passes it.
+  const solo = [ks[1]];
+  let t2 = noteTops({}, solo, at(1, 1), '2026-11-01');
+  t2 = noteTops(t2, solo, at(1, 31), '2026-11-03');
+  t2 = noteTops(t2, solo, at(1, 71), '2026-11-05');
+  assert.deepEqual(quranTypeStats({ '2026-11-02': [65] }, solo, at(1, 71), '2026-11-05', t2).listen.days, { '2026-11-03': 30, '2026-11-05': 40 });
 }
 
 // Sessions (مصحفي «جلسة»): pages by ayat, first memorization vs review, memorized pages and ajzaa, الكهف on Friday.
