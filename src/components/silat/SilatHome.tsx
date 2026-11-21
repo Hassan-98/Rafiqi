@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { CalendarHeart, Check, ChevronDown, Flame, HeartHandshake, MessageCircle, Phone, Sprout, Stethoscope, UserPlus } from 'lucide-react';
+import { CalendarHeart, Check, ChevronDown, Flame, HeartHandshake, MessageCircle, Phone, Sprout, Stethoscope, UserPlus, Users } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ArchMotif, SectionTitle } from '@/components/ui/Ornament';
@@ -17,6 +17,7 @@ import {
 } from '@/store/silatModel';
 import { followUpType, openExternal } from '@/services/silatPhone';
 import { toArabicDigits as ar } from '@/utils/arabicFormat';
+import { GatheringSheet } from './GatheringSheet';
 import { PersonRow } from './PersonRow';
 import { Avatar, Quote, TYPE_ICON, dailyIndex, telHref } from './silatUi';
 
@@ -170,6 +171,7 @@ export function SilatHome({
   const today = dayKey(now);
   const [filter, setFilter] = useState<Filter>('all');
   const [showAllDue, setShowAllDue] = useState(false);
+  const [gathering, setGathering] = useState(false);
 
   const data = useMemo(() => {
     const live = people.filter(isLive);
@@ -305,6 +307,13 @@ export function SilatHome({
           </div>
         </div>
       </Card>
+
+      {data.ranked.length > 1 ? (
+        <Button variant="secondary" fullWidth leftIcon={<Users size={17} />} onClick={() => setGathering(true)}>
+          سجّل اجتماعاً عائلياً
+        </Button>
+      ) : null}
+      <GatheringSheet open={gathering} onClose={() => setGathering(false)} />
 
       {circleTotal ? <WeekCircleCard reached={circle.reached} waiting={circle.waiting.map((r) => r.person)} onOpen={onOpen} /> : null}
 

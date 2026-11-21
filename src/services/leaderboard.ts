@@ -2,7 +2,9 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { addDays, format, parseISO, startOfMonth, startOfWeek, subDays } from 'date-fns';
+import { Capacitor } from '@capacitor/core';
 import { supabase, guestClient, isSupabaseConfigured } from '@/services/supabaseClient';
+import { isDesktopShell } from '@/services/NotificationService';
 import { safeStorage } from '@/store/safeStorage';
 import { useAuthStore } from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -190,6 +192,20 @@ const TOOK_PART_AS_GOOGLE = 'rafiqi-lb-google';
 let guestOffUntil = 0;
 
 /**
+ * Never a real participant: the dev server (vite) or a browser driven by a
+ * test (headless Chrome/CDP, Playwright → navigator.webdriver). Owner
+ * 2026-11-21: a dev guest «حسن» and nameless test guests showed up as people.
+ * Such a client makes no new guest, uploads nothing, and takes a guest's rows down.
+ */
+const NOT_REAL = import.meta.env.DEV || (typeof navigator !== 'undefined' && navigator.webdriver === true);
+
+/** Where a profile uploads from, for the owner's audit (supabase/audit/leaderboard_participants.sql); never shown in the app. */
+const client = () =>
+  `${Capacitor.getPlatform() === 'android' ? 'android' : isDesktopShell() ? 'desktop' : 'web'}/${typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '?'}`;
+/** The server is still without 20261121120000_leaderboard_client.sql: upload profiles without `client`. */
+let noClientColumn = false;
+
+/**
  * Who uploads and reads: the Google account when signed in (one row across
  * devices), otherwise this device's anonymous guest — created on first use, so
  * no sign-in is ever needed. Never creates a guest for someone who left the board.
@@ -222,7 +238,7 @@ export async function who(): Promise<Who | null> {
   const db = guestClient() as unknown as Db;
   const { data } = await db.auth.getSession();
   if (data.session) return { db, uid: data.session.user.id };
-  if (!useSettingsStore.getState().leaderboardJoin) return null;
+  if (NOT_REAL || !useSettingsStore.getState().leaderboardJoin) return null;
   if (Date.now() < guestOffUntil) return fail({ code: 'anonymous_provider_disabled' });
   signingIn ??= db.auth
     .signInAnonymously()
@@ -397,7 +413,7 @@ export async function pushScores(): Promise<void> {
   const id = await who();
   if (!id) return;
   const { db, uid } = id;
-  if (!leaderboardJoin) {
+  if (!leaderboardJoin || (NOT_REAL && db !== supabase)) {
     if (leftFor === uid) return;
     // Off = gone from the board: delete every row of ours.
     const a = await db.from('leaderboard_days').delete().eq('user_id', uid);
@@ -409,6 +425,8 @@ export async function pushScores(): Promise<void> {
     }
     return;
   }
+  // A dev/test client signed in with Google reads the board but never overwrites the real account's days.
+  if (NOT_REAL) return void refreshMine();
   leftFor = '';
   const [today] = periodRange('today');
   const [yesterday] = periodRange('yesterday');
@@ -419,9 +437,12 @@ export async function pushScores(): Promise<void> {
   if (sig === lastSig) return void refreshMine();
   const now = new Date().toISOString();
   try {
-    const p = await db
-      .from('leaderboard_profiles')
-      .upsert({ user_id: uid, display_name: name, hide_name: leaderboardHideName, updated_at: now });
+    const profile = { user_id: uid, display_name: name, hide_name: leaderboardHideName, updated_at: now };
+    let p = await db.from('leaderboard_profiles').upsert(noClientColumn ? profile : ({ ...profile, client: client() } as typeof profile));
+    if (p.error?.code === 'PGRST204') {
+      noClientColumn = true;
+      p = await db.from('leaderboard_profiles').upsert(profile);
+    }
     if (p.error) return void fail(p.error);
     const up = (rows: typeof days) =>
       db.from('leaderboard_days').upsert(

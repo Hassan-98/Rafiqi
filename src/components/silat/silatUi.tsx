@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 import {
   Flower2, Footprints, Gift, HandCoins, HandHeart, HandHelping, Handshake, HeartHandshake, House, Mic, MessageCircle,
-  Moon, PartyPopper, Phone, ScrollText, Soup, Stethoscope, Tent, Trees, UtensilsCrossed, Video, Wallet,
+  Moon, PartyPopper, Phone, ScrollText, Soup, Stethoscope, Tent, Trees, Users, UtensilsCrossed, Video, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { ProgressRing } from '@/components/ui/ProgressRing';
@@ -11,8 +11,8 @@ import { toast, useToastStore } from '@/store/toastStore';
 import { useSilatStore } from '@/store/silatStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { dayKey } from '@/store/studyModel';
-import { CONTACT, RECONCILE_POINTS, TYPE_TEXT, isContact, withPronoun, type ContactType, type SilatText } from '@/data/silatContent';
-import { countsFor, displayName, isFemale, milestoneOf, reconcileEntry, repairing, type Person, type PersonStatus } from '@/store/silatModel';
+import { CONTACT, RECONCILE_POINTS, TYPE_TEXT, isContact, pointsFor, withPronoun, type ContactType, type SilatText } from '@/data/silatContent';
+import { countsFor, displayName, isFemale, milestoneOf, othersText, reconcileEntry, repairing, type Person, type PersonStatus } from '@/store/silatModel';
 import { toArabicDigits as ar } from '@/utils/arabicFormat';
 
 export const TYPE_ICON: Record<ContactType, LucideIcon> = {
@@ -37,6 +37,7 @@ export const TYPE_ICON: Record<ContactType, LucideIcon> = {
   grave: Footprints,
   debt: ScrollText,
   hajj: Tent,
+  gathering: Users,
 };
 
 /** Deeds (du'a, asking after, what reaches one who has died) wear gold; contact wears the accent. */
@@ -179,7 +180,7 @@ export function logContact(p: Person, type: ContactType, extra?: { note?: string
   const nth = !p.deceased && countsFor(p, type) ? st.entries.filter((e) => e.personId === p.id && countsFor(p, e.type)).length + 1 : 0;
   const milestone = nth ? milestoneOf(nth) : null;
   const id = st.log(p.id, type, extra);
-  const pts = (repeat ? 0 : CONTACT[type].points) + (firstAfterRift ? RECONCILE_POINTS : 0);
+  const pts = (repeat ? 0 : pointsFor(type, p.relation)) + (firstAfterRift ? RECONCILE_POINTS : 0);
   const fadl = firstOfKind ? TYPE_TEXT[type] : undefined;
   const more = milestone ? withPronoun(`هذه صلتك ${milestone} ل{ه}، بارك الله فيك`, female) : fadl ? `${fadl.quran ? `﴿${fadl.text}﴾` : fadl.text} ${fadl.source}` : '';
   useToastStore.getState().push({
@@ -190,6 +191,30 @@ export function logContact(p: Person, type: ContactType, extra?: { note?: string
     action: { label: 'تراجع', onPress: () => useSilatStore.getState().removeEntry(id) },
   });
   return id;
+}
+
+/**
+ * «اجتماع عائلي»: one 'gathering' entry per person met (each keeps their own
+ * rhythm), one toast with the total and one «تراجع» for all of them.
+ */
+export function logGathering(people: readonly Person[], extra?: { note?: string; at?: number }): void {
+  const st = useSilatStore.getState();
+  const gender = useSettingsStore.getState().gender;
+  const day = dayKey(extra?.at ?? Date.now());
+  let pts = 0;
+  const ids = people.map((p) => {
+    const repeat = st.entries.some((e) => e.personId === p.id && e.type === 'gathering' && e.day === day);
+    const firstAfterRift = repairing(p) && !reconcileEntry(p, useSilatStore.getState().entries);
+    pts += (repeat ? 0 : pointsFor('gathering', p.relation)) + (firstAfterRift ? RECONCILE_POINTS : 0);
+    return st.log(p.id, 'gathering', extra);
+  });
+  useToastStore.getState().push({
+    kind: 'success',
+    title: `تقبّل الله${pts ? ` · +${ar(pts)}` : ''}`,
+    body: `اجتماع عائلي — ${people.slice(0, 3).map((p) => displayName(p, gender)).join('، ')}${people.length > 3 ? ` ${othersText(people.length - 3)}` : ''} · ${TYPE_TEXT.gathering.text} ${TYPE_TEXT.gathering.source}`,
+    durationMs: 6000,
+    action: { label: 'تراجع', onPress: () => ids.forEach((id) => useSilatStore.getState().removeEntry(id)) },
+  });
 }
 
 /** A ready message to anyone: the share sheet (Android's or the browser's), else the clipboard. False when nothing was sent on. */

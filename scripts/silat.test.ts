@@ -166,6 +166,18 @@ const entry = (personId: string, type: ContactType, day: string, h = 10): SilatE
   const big = silatPointsOn(many.map((p) => entry(p.id, 'visit', TODAY)), many, TODAY);
   assert.equal(big.points, 60);
   assert.equal(big.lines.reduce((n, l) => n + l.points, 0), 60);
+
+  // «اجتماع عائلي»: parents 4, siblings 3, everyone else 1 — once per person a day, and it keeps their rhythm
+  const sis = person('sis', 'sister', 7);
+  const uncle = person('uncle', 'uncleP', 30);
+  const fil = person('fil', 'fatherInLaw', 7);
+  const pa = person('pa', 'father', 2);
+  const g = [mom, pa, bro, sis, uncle, fil].map((p) => entry(p.id, 'gathering', TODAY));
+  const gp = silatPointsOn([...g, entry('uncle', 'gathering', TODAY, 15)], [mom, pa, bro, sis, uncle, fil], TODAY);
+  assert.equal(gp.points, 4 + 4 + 3 + 3 + 1 + 4);
+  assert.deepEqual(gp.lines, [{ label: 'اجتماع عائلي ×٦', points: 19 }]);
+  assert.equal(statusOf(uncle, g, TODAY).state, 'done');
+  assert.ok(isContact('gathering') && groupOf('gathering') === 'meet');
 }
 
 // ── occasions & the sick ──
@@ -371,7 +383,7 @@ const entry = (personId: string, type: ContactType, day: string, h = 10): SilatE
 // ── the catalog of kinds ──
 {
   const all = Object.keys(CONTACT) as ContactType[];
-  assert.equal(all.length, 21); // «السؤال عنه» removed by the owner 2026-11-19, before release
+  assert.equal(all.length, 22); // «السؤال عنه» removed by the owner 2026-11-19, before release; «اجتماع عائلي» added 2026-11-21
   // the original eight keep their ids and points (persisted entries and the board depend on them)
   assert.deepEqual(
     Object.fromEntries((['visit', 'help', 'gift', 'call', 'message', 'dua', 'sadaqah', 'wudd'] as const).map((t) => [t, CONTACT[t].points])),

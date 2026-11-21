@@ -8,7 +8,7 @@ import { Field, Pill, fieldClass } from '@/components/study/studyUi';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useSilatStore } from '@/store/silatStore';
 import {
-  CONTACT, DECEASED_TYPES, LIVING_GROUPS, RECONCILE_POINTS, T, TYPE_TEXT, typeLabel, type ContactType,
+  DECEASED_TYPES, LIVING_GROUPS, RECONCILE_POINTS, T, TYPE_TEXT, pointsFor, typeLabel, type ContactType,
 } from '@/data/silatContent';
 import { displayName, isFemale, reconcileEntry, repairing, type Person } from '@/store/silatModel';
 import { toArabicDigits as ar } from '@/utils/arabicFormat';
@@ -66,7 +66,7 @@ export function LogSheet({ person, suggest, onClose }: { person: Person | null; 
           <Icon size={16} strokeWidth={1.9} aria-hidden />
         </span>
         <span className="text-[13px] font-semibold text-text-primary dark:text-text-on-dark">{typeLabel(t, female)}</span>
-        <span className="font-counter tabular-nums text-[11px] font-bold text-gold-dark dark:text-gold-light">+{ar(CONTACT[t].points)}</span>
+        <span className="font-counter tabular-nums text-[11px] font-bold text-gold-dark dark:text-gold-light">+{ar(pointsFor(t, person?.relation ?? ''))}</span>
       </button>
     );
   };

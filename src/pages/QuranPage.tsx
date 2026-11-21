@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router';
 import { format, startOfWeek, subDays } from 'date-fns';
 import { surahs } from '@/data/surahs';
 import { BookOpen, CalendarDays, Check, ChevronLeft, Flame, Headphones, Link2, RefreshCw, Repeat, Sprout, Unlink, type LucideIcon } from 'lucide-react';
@@ -22,11 +22,9 @@ import type { BadgeMetric } from '@/data/badges';
 import { StatsShortcut } from '@/components/stats/StatsShortcut';
 import { GroupsHomeCard } from '@/components/groups/GroupsHomeCard';
 import {
-  ayahKey,
   khatmaState,
   mushafiToday,
   normalizeMushafiCode,
-  pageOfAyah,
   prettyMushafiCode,
   quranTypeStats,
   sessionCredit,
@@ -59,7 +57,6 @@ const minutesTxt = (m: number) => {
   return h ? `${ar(h)} س${r ? ` ${ar(r)} د` : ''}` : `${ar(r)} د`;
 };
 const dk = (d: Date | number) => format(d, 'yyyy-MM-dd');
-const KAHF = surahs[17].pages;
 
 function agoTxt(t: number | null): string {
   if (!t) return 'لم تتم بعد';
@@ -74,9 +71,8 @@ function agoTxt(t: number | null): string {
  * «القرآن» — the Quran is read in «مصحفي» (a separate app); this tab links to it,
  * opens it, and shows what its sync brought back. Redesigned 2026-11-20 (owner: «عشوائية»,
  * the hifz and sessions boxes stranded at the bottom): one night hero for today's wird,
- * then «خطة اليوم» — every khatma's portion, the hifz review, new hifz and الكهف on
- * Friday in ONE checklist — then the khatmas, the hifz map, the week by type and the
- * latest sessions. Stats, badges and reminders read the same record.
+ * then the khatmas (each one's portion), the hifz map, the week by type and the latest
+ * sessions. «خطة اليوم» was dropped the next day (owner: the log is enough). Stats, badges and reminders read the same record.
  */
 export function QuranPage() {
   const code = useMushafiStore((s) => s.code);
@@ -195,7 +191,6 @@ function LinkCard() {
 }
 
 function Linked({ code }: { code: string }) {
-  const navigate = useNavigate();
   const days = useMushafiStore((s) => s.days);
   const khatmas = useMushafiStore((s) => s.khatmas);
   const marks = useMushafiStore((s) => s.marks);
@@ -204,7 +199,6 @@ function Linked({ code }: { code: string }) {
   const setCode = useMushafiStore((s) => s.setCode);
   const fallback = useSettingsStore((s) => s.quranDailyTarget);
   const cycle = useSettingsStore((s) => s.hifzCycle);
-  const weekly = useSettingsStore((s) => s.hifzWeekly);
   const legacyWird = useQuranStore((s) => s.wird);
   const [unlink, setUnlink] = useState(false);
   const [typeOpen, setTypeOpen] = useState<QuranType | null>(null);
@@ -252,75 +246,9 @@ function Linked({ code }: { code: string }) {
   const running = all.filter((s) => s.live).sort((a, b) => b.owe - a.owe);
   const finished = all.filter((s) => !s.live).sort((a, b) => (b.finished ?? '').localeCompare(a.finished ?? ''));
 
-  // ── «خطة اليوم»: each khatma's portion, the review, new hifz, الكهف on Friday ──
-  const plan: PlanItem[] = t.live.map((s) => ({
-    id: s.id,
-    Icon: QURAN_TYPES[s.type].Icon,
-    title: s.name,
-    sub: `${QURAN_TYPES[s.type].label}${s.owe > 0 ? ` · من ص ${ar(s.next)} إلى ${ar(s.end)}` : ''}${s.late ? `، منها ${ar(s.late)} فاتتك` : ''}`,
-    done: s.owe === 0,
-    status: s.owe === 0 ? 'تمّ' : `بقي ${ar(s.owe)} ص`,
-    frac: s.share > 0 ? (s.share - Math.min(s.owe, s.share)) / s.share : 1,
-    onOpen: () => void openMushafi(s.next),
-  }));
-  if (m.held > 0) {
-    const r = m.today;
-    const size = (rs: { from: number; to: number }[]) => rs.reduce((n, x) => n + x.to - x.from + 1, 0);
-    const near = size(r.recent);
-    const far = size(r.far);
-    plan.push({
-      id: 'review',
-      Icon: Repeat,
-      title: 'مراجعة الحفظ',
-      sub: r.left
-        ? [near ? `القريب ${pagesTxt(near)}` : '', far ? `البعيد ${pagesTxt(far)}` : '', r.late ? `منها ${ar(r.late)} متأخرة` : ''].filter(Boolean).join(' · ')
-        : r.done
-          ? `راجعت اليوم ${pagesTxt(r.done)}، بارك الله فيك`
-          : 'لا مراجعة عليك اليوم',
-      done: r.left === 0,
-      status: r.left === 0 ? 'تمّ' : `بقي ${num(r.left)} ص`,
-      frac: r.done + r.left > 0 ? r.done / (r.done + r.left) : 1,
-      onOpen: () => navigate('/hifz'),
-    });
-  }
-  if (m.held < 604 && (weekly > 0 || m.next != null)) {
-    const weekFrom = dk(startOfWeek(now, { weekStartsOn: 6 }));
-    let fresh = 0;
-    for (const [d, v] of m.days) if (d >= weekFrom) fresh += v.fresh;
-    const freshToday = m.days.get(today)?.fresh ?? 0;
-    const next = m.next != null ? ayahKey(m.next) : null;
-    const nextTxt = next ? `${surahs[next[0] - 1].nameArabic} من الآية ${ar(next[1])}` : '';
-    const goal = weekly > 0;
-    plan.push({
-      id: 'hifz',
-      Icon: Sprout,
-      title: goal ? 'الحفظ الجديد · هدف الأسبوع' : 'الحفظ الجديد',
-      sub: nextTxt ? `التالي: ${nextTxt}` : 'ابدأ من حيث شئت',
-      done: goal ? fresh >= weekly : freshToday > 0,
-      status: goal ? (fresh >= weekly ? 'تمّ' : `${num(fresh)} من ${ar(weekly)} ص`) : freshToday > 0 ? 'تمّ' : m.next != null ? `ص ${ar(pageOfAyah(m.next))}` : '',
-      frac: goal ? fresh / weekly : freshToday > 0 ? 1 : 0,
-      onOpen: () => navigate('/hifz'),
-    });
-  }
-  if (new Date(now).getDay() === 5) {
-    const read = days[today] ?? [];
-    const kahf = ses.kahfFridays.has(today) || Array.from({ length: KAHF[1] - KAHF[0] + 1 }, (_, i) => KAHF[0] + i).every((p) => read.includes(p));
-    plan.push({
-      id: 'kahf',
-      Icon: BookOpen,
-      title: 'سورة الكهف',
-      sub: 'من سنن يوم الجمعة',
-      done: kahf,
-      status: kahf ? 'تمّ' : `ص ${ar(KAHF[0])}`,
-      frac: kahf ? 1 : 0,
-      onOpen: () => void openMushafi(KAHF[0]),
-    });
-  }
-
   return (
     <>
       <Hero t={t} today={week.perDay[6]} weekPages={week.perDay.reduce((a, b) => a + b, 0)} streak={streaks.any} />
-      <TodayPlan items={plan} />
       <Khatmas running={running} finished={finished} />
       <HifzPanel m={m} now={now} />
       <WeekSection keys={week.keys} perDay={week.perDay} byType={week.byType} streaks={streaks.byType} types={types} onType={setTypeOpen} />
@@ -380,17 +308,6 @@ function TypeIcon({ type, size = 32 }: { type: QuranType; size?: number }) {
   );
 }
 
-function Bar({ frac, gold = false, className = '' }: { frac: number; gold?: boolean; className?: string }) {
-  return (
-    <span className={`block h-1.5 rounded-full bg-teal/10 overflow-hidden ${className}`} aria-hidden>
-      <span
-        className={`block h-full rounded-full ${gold ? 'bg-[image:var(--gradient-gold)]' : 'bg-[image:var(--gradient-teal)]'}`}
-        style={{ width: `${Math.round(Math.max(0, Math.min(1, frac)) * 100)}%` }}
-      />
-    </span>
-  );
-}
-
 /** A section title's «more» link. */
 function MoreLink({ to, children }: { to: string; children: ReactNode }) {
   return (
@@ -402,7 +319,7 @@ function MoreLink({ to, children }: { to: string; children: ReactNode }) {
 
 // ── the hero ─────────────────────────────────────────────────────────────────
 
-/** Today's wird on a ring: what all the running khatmas owe today, together — their names are in «خطة اليوم». */
+/** Today's wird on a ring: what all the running khatmas owe today, together — each one's share is in «ختماتك». */
 function Hero({ t, today, weekPages, streak }: { t: MushafiToday; today: number; weekPages: number; streak: number }) {
   const syncedAt = useMushafiStore((s) => s.syncedAt);
   const status = useMushafiStore((s) => s.status);
@@ -450,7 +367,7 @@ function Hero({ t, today, weekPages, streak }: { t: MushafiToday; today: number;
           <>
             <BookOpen size={15} className="shrink-0 text-gold-light" aria-hidden />
             بقي {pagesTxt(t.owe)}
-            {t.late > 0 ? <span className="text-gold-light"> · منها {ar(t.late)} فاتتك</span> : null}
+            {t.late > 0 ? <span className="text-gold-light">، منها {ar(t.late)} فاتتك</span> : null}
           </>
         )}
       </p>
@@ -511,95 +428,6 @@ function HeroStat({ Icon, value, label }: { Icon: LucideIcon; value: string; lab
       <p className="mt-1 text-[17px] font-counter font-bold tabular-nums leading-tight text-text-on-dark">{value}</p>
       <p className="text-[10.5px] text-text-on-dark/70 leading-tight truncate">{label}</p>
     </div>
-  );
-}
-
-// ── «خطة اليوم» ──────────────────────────────────────────────────────────────
-
-interface PlanItem {
-  id: string;
-  Icon: LucideIcon;
-  title: string;
-  sub: string;
-  done: boolean;
-  /** Short, on the line's end: «بقي ٥ ص» · «تمّ». */
-  status: string;
-  frac: number;
-  onOpen: () => void;
-}
-
-function TodayPlan({ items }: { items: PlanItem[] }) {
-  const done = items.filter((i) => i.done).length;
-  return (
-    <section className="flex flex-col gap-3">
-      <SectionTitle
-        title="خطة اليوم"
-        subtitle="وِرد ختماتك ومراجعتك وحفظك، كلٌّ في سطر"
-        action={
-          items.length ? (
-            <span className="text-[12px] font-bold font-counter tabular-nums text-text-muted">
-              {ar(done)} من {ar(items.length)}
-            </span>
-          ) : undefined
-        }
-      />
-      {items.length ? (
-        <Card className="p-1.5">
-          <ul className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.06]">
-            {items.map((it) => (
-              <li key={it.id}>
-                <button
-                  type="button"
-                  onClick={it.onOpen}
-                  className="w-full flex items-center gap-3 rounded-[var(--radius-inner)] px-2.5 py-3 text-start hover:bg-teal/5 transition-colors"
-                >
-                  <span
-                    className={[
-                      'size-10 shrink-0 rounded-xl inline-flex items-center justify-center',
-                      it.done ? 'bg-gold/15 text-gold-dark dark:text-gold-light' : 'bg-teal/10 dark:bg-teal/15 text-teal dark:text-teal-light',
-                    ].join(' ')}
-                    aria-hidden
-                  >
-                    {it.done ? <Check size={18} strokeWidth={3} /> : <it.Icon size={18} />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span
-                        className={[
-                          'text-[14px] font-bold truncate',
-                          it.done ? 'text-text-secondary dark:text-text-on-dark/70' : 'text-text-primary dark:text-text-on-dark',
-                        ].join(' ')}
-                      >
-                        {it.title}
-                      </span>
-                      <span
-                        className={[
-                          'shrink-0 text-[12px] font-bold font-counter tabular-nums',
-                          it.done ? 'text-gold-dark dark:text-gold-light' : 'text-teal dark:text-teal-light',
-                        ].join(' ')}
-                      >
-                        {it.status}
-                      </span>
-                    </span>
-                    <span className="block text-[11.5px] text-text-muted truncate">{it.sub}</span>
-                    {it.done ? null : <Bar frac={it.frac} className="mt-1.5" />}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : (
-        <Card className="p-4 flex flex-col gap-3">
-          <p className="text-[13px] leading-relaxed text-text-secondary dark:text-text-on-dark/80 text-pretty">
-            لا وِرد عليك اليوم بعد. أنشئ ختمة في مصحفي («الختمات» ثم «ختمة جديدة») واختر نوعها وأيامها، فيظهر وردها هنا كل يوم.
-          </p>
-          <Button variant="soft" onClick={() => void openMushafi()} leftIcon={<BookOpen size={16} />}>
-            افتح مصحفي
-          </Button>
-        </Card>
-      )}
-    </section>
   );
 }
 

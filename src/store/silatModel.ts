@@ -20,7 +20,7 @@ import { WEEKDAY_AR, atTime, dayKey, durationAr, parseKey, shiftKey, type Planne
 import { toArabicDigits } from '@/utils/arabicFormat';
 import {
   CONTACT, DECEASED_TYPES, MESSAGE_TEMPLATES, RECONCILE_POINTS, REPAIR_STEPS, SILAT_DAY_MAX,
-  categoryOfRelation, closenessOf, isContact, isFemaleRelation, relationLabel, withPronoun,
+  categoryOfRelation, closenessOf, isContact, isFemaleRelation, pointsFor, relationLabel, withPronoun,
   type ContactType, type MessageTemplate, type SilatCategory,
 } from '@/data/silatContent';
 import { silatNotifMeta } from '@/store/silatPhoneModel';
@@ -583,7 +583,7 @@ export interface SilatPoints {
 
 /**
  * A day's points for «الترتيب», by effort (CONTACT: a sick visit 10, a visit 8,
- * a call 4, a message 2, du'a 1…). Each type counts once per person per day;
+ * a call 4, a message 2, du'a 1…; «اجتماع عائلي» by relation, gatheringPoints). Each type counts once per person per day;
  * the first contact after a broken tie adds RECONCILE_POINTS. Capped at
  * SILAT_DAY_MAX.
  */
@@ -598,7 +598,7 @@ export function silatPointsOn(entries: readonly SilatEntry[], people: readonly P
     seen.add(k);
     const row = per.get(e.type) ?? { n: 0, pts: 0 };
     row.n++;
-    row.pts += CONTACT[e.type].points;
+    row.pts += pointsFor(e.type, live.get(e.personId)!.relation);
     per.set(e.type, row);
   }
   const lines = [...per.entries()]

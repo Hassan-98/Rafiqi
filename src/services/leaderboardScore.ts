@@ -142,7 +142,7 @@ export const LB_RULES: { title: string; rules: LbRule[] }[] = [
       {
         label: 'صلة الرحم',
         points: `${Math.min(...silatPts)}–${Math.max(...silatPts)}`,
-        note: `بحسب العمل: الزيارة ${CONTACT.visit.points}، الاتصال ${CONTACT.call.points}، الدعاء ${CONTACT.dua.points} · أول صلة بعد قطيعة +${RECONCILE_POINTS} · حتى ${SILAT_DAY_MAX} في اليوم`,
+        note: `بحسب العمل: الزيارة ${CONTACT.visit.points}، الاتصال ${CONTACT.call.points}، الدعاء ${CONTACT.dua.points}، الاجتماع العائلي لكل من حضر (الوالدان ٤، الإخوة ٣، غيرهم ١) · أول صلة بعد قطيعة +${RECONCILE_POINTS} · حتى ${SILAT_DAY_MAX} في اليوم`,
       },
       { label: 'مهام المنزل', points: '1–15', note: 'طبخ، غسيل، تنظيف، تسوّق… بحسب المهمة' },
     ],

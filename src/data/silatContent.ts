@@ -143,7 +143,7 @@ export const SINCE_CHOICES: { id: 'soon' | 'month' | 'long'; label: string }[] =
 export type ContactType =
   | 'visit' | 'help' | 'gift' | 'call' | 'message' | 'dua' | 'sadaqah' | 'wudd'
   | 'video' | 'voice' | 'iyada' | 'invite' | 'outing' | 'food' | 'money' | 'congrats' | 'condole' | 'islah'
-  | 'grave' | 'debt' | 'hajj';
+  | 'grave' | 'debt' | 'hajj' | 'gathering';
 
 export interface ContactDef {
   /** The generic label (lists, «الترتيب»): a pronoun in it is the masculine «ه». */
@@ -178,7 +178,19 @@ export const CONTACT: Record<ContactType, ContactDef> = {
   grave: { label: 'زيارة قبره', labelF: 'زيارة قبرها', done: 'زرت قبر{ه} ودعوت ل{ه}', points: 5 },
   debt: { label: 'قضاء دَينه أو وصيته', labelF: 'قضاء دَينها أو وصيتها', done: 'وفّيت عن{ه} ديناً أو وصية', points: 8 },
   hajj: { label: 'حجّ أو عمرة عنه', labelF: 'حجّ أو عمرة عنها', done: 'حججت أو اعتمرت عن{ه}', points: 10 },
+  /** One entry per person met; `points` is the base — the real share is gatheringPoints. */
+  gathering: { label: 'اجتماع عائلي', done: 'لقيت{ه} في اجتماع العائلة', points: 1 },
 };
+
+/**
+ * «اجتماع عائلي»: many met at once, so not a visit (8) each — the parents
+ * (the «الوالدان» circle) 4, a brother or sister 3, everyone else 1.
+ */
+export const gatheringPoints = (relation: string): number =>
+  categoryOfRelation(relation) === 'parents' ? 4 : relation === 'brother' || relation === 'sister' ? 3 : 1;
+
+/** A contact's points for this person (only «اجتماع عائلي» depends on who). */
+export const pointsFor = (t: ContactType, relation: string): number => (t === 'gathering' ? gatheringPoints(relation) : CONTACT[t].points);
 
 /** The label for this person: «صدقة عنها» for a woman. */
 export const typeLabel = (t: ContactType, female = false): string => (female && CONTACT[t].labelF) || CONTACT[t].label;
@@ -188,7 +200,7 @@ export type ContactGroupId = 'reach' | 'meet' | 'give' | 'occasion' | 'ghayb' | 
 /** Every type in exactly one group, the everyday ones first (the log sheet's order). */
 export const CONTACT_GROUPS: { id: ContactGroupId; label: string; types: ContactType[] }[] = [
   { id: 'reach', label: 'تواصل', types: ['call', 'message', 'voice', 'video'] },
-  { id: 'meet', label: 'زيارة ولقاء', types: ['visit', 'iyada', 'invite', 'outing'] },
+  { id: 'meet', label: 'زيارة ولقاء', types: ['visit', 'gathering', 'iyada', 'invite', 'outing'] },
   { id: 'give', label: 'عطاء وعون', types: ['gift', 'food', 'help', 'money'] },
   { id: 'occasion', label: 'مناسبات وإصلاح', types: ['congrats', 'condole', 'islah'] },
   { id: 'ghayb', label: 'بظهر الغيب', types: ['dua'] },
@@ -334,6 +346,7 @@ export const TYPE_TEXT: Record<ContactType, SilatText> = {
   grave: T.qubur,
   debt: T.dayn,
   hajj: T.hajjAnha,
+  gathering: T.arsh,
 };
 
 // ── ideas ────────────────────────────────────────────────────────────────────
