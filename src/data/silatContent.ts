@@ -184,10 +184,18 @@ export const CONTACT: Record<ContactType, ContactDef> = {
 
 /**
  * «اجتماع عائلي»: many met at once, so not a visit (8) each — the parents
- * (the «الوالدان» circle) 4, a brother or sister 3, everyone else 1.
+ * (the «الوالدان» circle) 5, the uncles and aunts (both sides) 4, a brother or
+ * sister 3, everyone else 1 (owner 2026-11-27).
  */
+const UNCLES = new Set(['uncleP', 'auntP', 'uncleM', 'auntM']);
 export const gatheringPoints = (relation: string): number =>
-  categoryOfRelation(relation) === 'parents' ? 4 : relation === 'brother' || relation === 'sister' ? 3 : 1;
+  categoryOfRelation(relation) === 'parents'
+    ? 5
+    : UNCLES.has(relation)
+      ? 4
+      : relation === 'brother' || relation === 'sister'
+        ? 3
+        : 1;
 
 /** A contact's points for this person (only «اجتماع عائلي» depends on who). */
 export const pointsFor = (t: ContactType, relation: string): number => (t === 'gathering' ? gatheringPoints(relation) : CONTACT[t].points);

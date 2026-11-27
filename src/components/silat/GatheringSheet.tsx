@@ -13,7 +13,7 @@ import { Avatar, logGathering } from './silatUi';
 
 /**
  * «اجتماع عائلي»: tick who was there; each gets a 'gathering' contact (their
- * rhythm is kept) worth gatheringPoints — the parents 4, siblings 3, the rest 1.
+ * rhythm is kept) worth gatheringPoints — the parents 5, uncles/aunts 4, siblings 3, the rest 1.
  */
 export function GatheringSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const gender = useSettingsStore((s) => s.gender);

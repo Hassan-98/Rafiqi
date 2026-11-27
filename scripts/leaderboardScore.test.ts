@@ -156,9 +156,16 @@ assert.deepEqual(scoreDay(base(), K).parts, []);
   s.periods = [{ targetId: 'd', endedAt: endOf(Y), goal: 100, done: 100 }];
   assert.equal(part(s, 'awrad:d', Y), wirdWeight(s.targets[0]));
   assert.equal(part(s, 'awrad:half', Y), 0);
-  // A rescue surcharge isn't part of the period's goal.
-  s.targets = [wird({ id: 'r', total: 150, current: 100, rescue: { lost: 5, step: 1, surcharge: 50 } })];
-  assert.equal(part(s, 'awrad:r'), wirdWeight(s.targets[0]));
+  // A rescue surcharge earns like the wird, uncapped (owner 2026-11-27: 100 → 250 done = 2.5×).
+  s.targets = [wird({ id: 'r', baseTotal: 100, total: 250, current: 250, rescue: { lost: 5, step: 3, surcharge: 150 } })];
+  assert.equal(part(s, 'awrad:r'), Math.round(2.5 * wirdWeight(s.targets[0])), 'rescue reps count');
+  s.targets = [wird({ id: 'r', baseTotal: 100, total: 250, current: 150, rescue: { lost: 5, step: 3, surcharge: 150 } })];
+  assert.equal(part(s, 'awrad:r'), Math.round(1.5 * wirdWeight(s.targets[0])), 'part of the rescue counts');
+  s.periods = [{ targetId: 'r', endedAt: endOf(Y), goal: 100, done: 100, base: 100, extra: 0, rescued: 150 }];
+  assert.equal(part(s, 'awrad:r', Y), Math.round(2.5 * wirdWeight(s.targets[0])), 'closed rescue day keeps its reps');
+  // Carried debt too: 100 base + 100 carried, all done = 2×.
+  s.targets = [wird({ id: 'c', baseTotal: 100, total: 200, current: 200 })];
+  assert.equal(part(s, 'awrad:c'), 2 * wirdWeight(s.targets[0]), 'carried reps count');
   // نافلة: what goes beyond the goal weighs like the wird — uncapped (owner); yesterday's from its period.
   s.targets = [wird({ id: 'n', current: 100, extra: 300 })];
   assert.equal(part(s, 'nafl:n'), 3 * wirdWeight(s.targets[0]));

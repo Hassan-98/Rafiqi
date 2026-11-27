@@ -83,6 +83,7 @@ function isSyncableKey(k: string): boolean {
 }
 
 function collectLocalState(): Record<string, string> {
+  window.dispatchEvent?.(new Event('myzikr:flush-storage')); // debounced stores (activity log) write now
   const out: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -170,6 +171,13 @@ const STORE_LOADERS: Record<string, () => Promise<unknown>> = {
   'myzikr:settings': () => import('@/store/settingsStore').then((m) => m.useSettingsStore),
   'myzikr:targets': () => import('@/store/targetsStore').then((m) => m.useTargetsStore),
   'myzikr:tasbih': () => import('@/store/tasbihStore').then((m) => m.useTasbihStore),
+  // Without a loader an adopted key stays storage-only: the live store keeps its
+  // stale copy (programs/badges read the other device's adhkar as unread) and
+  // its next write erases what was adopted.
+  'myzikr:activity-log': () => import('@/store/activityLogStore').then((m) => m.useActivityLogStore),
+  'myzikr:attention': () => import('@/store/attentionStore').then((m) => m.useAttentionStore),
+  'myzikr:streak-rescue': () => import('@/store/streakRescueStore').then((m) => m.useStreakRescueStore),
+  'myzikr:mushafi': () => import('@/store/mushafiStore').then((m) => m.useMushafiStore),
 };
 
 interface PersistApi {

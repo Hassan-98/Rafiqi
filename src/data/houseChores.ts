@@ -386,9 +386,11 @@ export const CHORES: Chore[] = [
     // Her own chores already are this, one by one.
     ownSideOnly: true,
     kinds: [
-      { id: 'light', label: 'خفيفة', points: 3 },
-      { id: 'normal', label: 'عادية', points: 5 },
-      { id: 'full', label: 'كبيرة', points: 8 },
+      // owner 2026-11-27: 2 / 3 / 5 / 10 (was 3 / 5 / 8) — rescores the past.
+      { id: 'light', label: 'خفيفة', points: 2 },
+      { id: 'normal', label: 'عادية', points: 3 },
+      { id: 'full', label: 'كبيرة', points: 5 },
+      { id: 'hard', label: 'مهمة شاقة', points: 10 },
     ],
   },
   {

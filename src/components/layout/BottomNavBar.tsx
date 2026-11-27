@@ -56,16 +56,16 @@ export const BottomNavBar = React.memo(function BottomNavBar() {
 
   return (
     <>
-      {/* A floating dock (owner 2026-11-19: tidier, and responsive): inset from the
-          edges, its width capped and centred so six tabs don't drift apart on a
-          tablet or a narrow desktop window; it sits above the safe-area inset.
-          The active tab is a slim pill behind its icon, its label in the accent. */}
+      {/* Docked flush to the screen's bottom edge (owner 2026-11-27: the floating
+          dock sat too high), full-width, its safe-area inset inside the bar. The
+          tabs stay capped and centred so six don't drift apart on a tablet or a
+          narrow desktop window. The active tab is a slim pill behind its icon. */}
       <nav
-        className="lg:hidden fixed inset-x-0 bottom-0 z-30 px-3 pointer-events-none"
-        style={{ paddingBottom: 'calc(var(--safe-bottom) + 0.5rem)' }}
+        className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-white/92 dark:bg-dark-surface/92 backdrop-blur-xl border-t border-black/[0.06] dark:border-white/[0.08]"
+        style={{ paddingBottom: 'var(--safe-bottom)' }}
         aria-label="التنقل الرئيسي"
       >
-        <div className="pointer-events-auto relative mx-auto max-w-[34rem] flex items-stretch h-16 px-1 rounded-[24px] bg-white/92 dark:bg-dark-surface/92 backdrop-blur-xl shadow-[var(--shadow-lg)] ring-1 ring-black/[0.06] dark:ring-white/[0.08]">
+        <div className="relative mx-auto max-w-[34rem] flex items-stretch h-16 px-1">
           {NAV_ITEMS.map((item, i) => {
             const active = i === activeIndex;
             const { Icon } = item;

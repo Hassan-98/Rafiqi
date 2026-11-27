@@ -18,7 +18,7 @@ import { quranTypeStats, sessionCredit, sessionStats } from '@/store/mushafiStor
 import { QURAN_TYPE_IDS } from '@/data/quranTypes';
 import { chorePoints } from '@/data/houseChores';
 import { silatPointsOn } from '@/store/silatModel';
-import { CONTACT, RECONCILE_POINTS, SILAT_DAY_MAX } from '@/data/silatContent';
+import { CONTACT, RECONCILE_POINTS, SILAT_DAY_MAX, gatheringPoints } from '@/data/silatContent';
 import { qadaPointsOn, QADA_POINTS } from '@/services/qadaPlan';
 import { programPointsOn, PROGRAM_POINTS } from '@/store/programsModel';
 import { fridayReviewPointsOn, REVIEW_POINTS } from '@/services/fridayReview';
@@ -89,37 +89,34 @@ const silatPts = Object.values(CONTACT).map((c) => c.points);
 
 /** «كيف تُحتسب النقاط» — grouped like the app's sections, from the same numbers. */
 export const LB_RULES: { title: string; rules: LbRule[] }[] = [
+  // Related items share one row (owner 2026-11-27): one line per worship, its
+  // variants and add-ons in the note — never the same points twice.
   {
     title: 'الصلاة',
     rules: [
-      { label: 'كل صلاة مفروضة', points: `${LB.fard}` },
+      { label: 'كل صلاة مفروضة', points: `${LB.fard}`, note: `وكذلك الفائتة إذا قضيتها: حتى ${QADA_POINTS.prayerMax} صلوات في اليوم` },
       { label: 'جماعةً في المسجد', points: `+${LB.mosque}`, note: `الفجر والعشاء +${LB.mosqueHeavy}`, for: 'male' },
       { label: 'على وقتها', points: `+${LB.mosque}`, note: `الفجر والعشاء +${LB.mosqueHeavy}`, for: 'female' },
       { label: 'أذكار بعد كل صلاة', points: `${LB.after}` },
       { label: 'السنن الرواتب، لكل ركعة', points: `${LB.rawatib}` },
       { label: 'الضحى، لكل ركعة', points: `${LB.duha}`, note: `حتى ${LB.duhaMax} ركعة` },
-      { label: 'قيام الليل، لكل ركعة', points: `${LB.qiyam}`, note: `حتى ${LB.qiyamMax} ركعة` },
-      { label: 'الوتر', points: `+${LB.witr}` },
-      { label: 'القيام في الثلث الأخير', points: `+${LB.lastThird}` },
-      { label: 'قضاء صلاة فائتة', points: `${QADA_POINTS.prayer}`, note: `حتى ${QADA_POINTS.prayerMax} صلوات في اليوم` },
+      {
+        label: 'قيام الليل، لكل ركعة',
+        points: `${LB.qiyam}`,
+        note: `حتى ${LB.qiyamMax} ركعة · الوتر +${LB.witr} · في الثلث الأخير +${LB.lastThird}`,
+      },
     ],
   },
   {
     title: 'الصيام',
-    rules: [
-      { label: 'صيام التطوع', points: `${LB.fasting}` },
-      { label: 'قضاء يوم صيام', points: `${QADA_POINTS.fast}` },
-    ],
+    rules: [{ label: 'يوم صيام', points: `${LB.fasting}`, note: QADA_POINTS.fast === LB.fasting ? 'تطوعاً أو قضاءً' : `القضاء ${QADA_POINTS.fast}` }],
   },
   {
     title: 'القرآن',
     rules: [
-      { label: 'صفحة من ختماتك قراءةً', points: `${LB.pageRead}`, note: 'تلاوة أو تفسير · بلا حد' },
-      { label: 'صفحة من ختماتك استماعاً', points: `${LB.pageListen}`, note: 'بلا حد' },
-      { label: 'صفحة من ختمة مراجعة', points: `${LB.reviewPage}`, note: 'بلا حد' },
-      { label: 'صفحة في جلسة تلاوة', points: `${LB.pageRead}`, note: 'من مصحفي، ما لم تحسبها ختمة يومها · بلا حد' },
-      { label: 'صفحة في جلسة استماع', points: `${LB.pageListen}`, note: 'بلا حد' },
-      { label: 'صفحة في جلسة مراجعة', points: `${LB.reviewPage}`, note: 'أو صفحة تعيد حفظها · بلا حد' },
+      { label: 'صفحة تقرؤها', points: `${LB.pageRead}`, note: 'في ختماتك أو جلسة تلاوة من مصحفي، تلاوةً أو تفسيراً · الصفحة مرة في يومها · بلا حد' },
+      { label: 'صفحة تستمع إليها', points: `${LB.pageListen}`, note: 'في ختماتك أو جلسة استماع · بلا حد' },
+      { label: 'صفحة تراجعها', points: `${LB.reviewPage}`, note: 'في ختمة أو جلسة مراجعة، أو صفحة تعيد حفظها · بلا حد' },
       { label: 'صفحة تحفظها أول مرة', points: `${LB.hifzPage}`, note: 'في جلسة حفظ · بلا حد' },
       { label: 'ختمة جماعية تمّت', points: `${LB.groupKhatma}`, note: 'لكل من قرأ فيها' },
     ],
@@ -127,12 +124,18 @@ export const LB_RULES: { title: string; rules: LbRule[] }[] = [
   {
     title: 'الأذكار والأوراد',
     rules: [
-      { label: 'أذكار الصباح', points: `${LB.morning + LB.tahlil}`, note: `منها ${LB.tahlil} لـ«لا إله إلا الله وحده لا شريك له» مئة مرة · المختصرة ${LB.morning / 2}` },
-      { label: 'أذكار المساء', points: `${LB.evening + LB.tahlil}`, note: `منها ${LB.tahlil} لـ«لا إله إلا الله وحده لا شريك له» مئة مرة · المختصرة ${LB.evening / 2}` },
+      {
+        label: 'أذكار الصباح، وأذكار المساء',
+        points: `${LB.morning + LB.tahlil}`,
+        note: `لكلٍّ منهما · منها ${LB.tahlil} لـ«لا إله إلا الله وحده لا شريك له» مئة مرة · المختصرة ${LB.morning / 2}`,
+      },
       { label: 'أذكار النوم', points: `${LB.sleep}` },
       { label: 'التسبيح، لكل مئة', points: `${LB.tasbih}`, note: `حتى ${LB.tasbihMax * 100} تسبيحة في اليوم` },
-      { label: 'الوِرد، لكل دقيقة من وقته', points: `${LB.wirdPerMinute}`, note: 'عدده × طول نصّه، بلا حد' },
-      { label: 'نافلة الوِرد (ما زاد على هدفه)', points: 'بميزانه', note: 'بلا حد' },
+      {
+        label: 'الوِرد، لكل دقيقة من وقته',
+        points: `${LB.wirdPerMinute}`,
+        note: 'عدده × طول نصّه · كل ما تؤديه منه بميزانه: المتأخر والتعويض والنافلة · بلا حد',
+      },
     ],
   },
   {
@@ -142,7 +145,7 @@ export const LB_RULES: { title: string; rules: LbRule[] }[] = [
       {
         label: 'صلة الرحم',
         points: `${Math.min(...silatPts)}–${Math.max(...silatPts)}`,
-        note: `بحسب العمل: الزيارة ${CONTACT.visit.points}، الاتصال ${CONTACT.call.points}، الدعاء ${CONTACT.dua.points}، الاجتماع العائلي لكل من حضر (الوالدان ٤، الإخوة ٣، غيرهم ١) · أول صلة بعد قطيعة +${RECONCILE_POINTS} · حتى ${SILAT_DAY_MAX} في اليوم`,
+        note: `بحسب العمل: الزيارة ${CONTACT.visit.points}، الاتصال ${CONTACT.call.points}، الدعاء ${CONTACT.dua.points}، الاجتماع العائلي لكل من حضر (الوالدان ${gatheringPoints('mother')}، الأعمام والأخوال ${gatheringPoints('uncleP')}، الإخوة ${gatheringPoints('brother')}، غيرهم ${gatheringPoints('')}) · أول صلة بعد قطيعة +${RECONCILE_POINTS} · حتى ${SILAT_DAY_MAX} في اليوم`,
       },
       { label: 'مهام المنزل', points: '1–15', note: 'طبخ، غسيل، تنظيف، تسوّق… بحسب المهمة' },
     ],
@@ -150,11 +153,12 @@ export const LB_RULES: { title: string; rules: LbRule[] }[] = [
   {
     title: 'العلم والتزكية',
     rules: [
-      { label: 'حلقة العلم، لكل ١٠ دقائق', points: `${LB.studyPer10}`, note: `حتى ${LB.studyMaxMin} دقيقة للدرس` },
-      { label: 'حضور الدرس في مجلسه', points: `+${LB.studyInPerson}` },
-      { label: 'برامج التدرّج: خطوة اليوم', points: `${PROGRAM_POINTS.checkIn}` },
-      { label: 'بلوغ محطة في البرنامج', points: `+${PROGRAM_POINTS.milestone}` },
-      { label: 'إتمام البرنامج', points: `+${PROGRAM_POINTS.finish}` },
+      { label: 'حلقة العلم، لكل ١٠ دقائق', points: `${LB.studyPer10}`, note: `حتى ${LB.studyMaxMin} دقيقة للدرس · حضوره في مجلسه +${LB.studyInPerson}` },
+      {
+        label: 'برامج التدرّج: خطوة اليوم',
+        points: `${PROGRAM_POINTS.checkIn}`,
+        note: `كل محطة تبلغها +${PROGRAM_POINTS.milestone} · إتمام البرنامج +${PROGRAM_POINTS.finish}`,
+      },
       { label: 'إتمام محاسبة الجمعة', points: `${REVIEW_POINTS}` },
     ],
   },
@@ -169,7 +173,7 @@ export type ScoreInput = Pick<
   gender?: BadgeSnapshot['gender'];
   targets: WirdInput[];
   /** Closed periods of the awrad (targetsStore.history): yesterday's daily wird is read from here. */
-  periods?: Pick<TargetPeriodRecord, 'targetId' | 'endedAt' | 'goal' | 'done' | 'base' | 'extra'>[];
+  periods?: Pick<TargetPeriodRecord, 'targetId' | 'endedAt' | 'goal' | 'done' | 'base' | 'extra' | 'rescued'>[];
   /** Reps of a full morning / evening / sleep set — partial sets earn pro rata. Absent = any reading counts whole. */
   setReps?: Partial<Record<'morning' | 'evening' | 'sleep', number>>;
   /** Reps of the «مختصر» morning / evening set — finishing it earns half (owner 2026-11-18: ٥ each). */
@@ -334,21 +338,23 @@ export function scoreDay(s: ScoreInput, k: string): DayScore {
   // ponytail: those miss reps logged on another device (the log isn't synced).
   // No ceiling, the wird or its نافلة (beyond the goal, weighed like the wird):
   // owner — an app of muhasaba, not a contest to game.
+  // Every rep weighs the same, against the BASE wird (owner 2026-11-27): the carried
+  // debt and a rescue surcharge too — a 100 wird (10 pts) raised to 250 and done = 25.
   for (const t of s.targets) {
     const per = PERIOD_DAYS[t.recurrence ?? ''];
     if (!per) continue;
     let frac = 0;
     let extra = 0;
     if (per === 1) {
-      const goal = t.total - (t.rescue?.surcharge ?? 0);
-      const base = t.baseTotal ?? goal;
+      const base = t.baseTotal ?? t.total - (t.rescue?.surcharge ?? 0);
       const h = dk(t.deadline) === k ? null : s.periods?.find((x) => x.targetId === t.id && dk(x.endedAt) === k);
       if (dk(t.deadline) === k) {
-        frac = goal > 0 ? t.current / goal : 0;
+        frac = base > 0 ? t.current / base : 0;
         extra = base > 0 ? (t.extra ?? 0) / base : 0;
       } else if (h) {
-        frac = h.goal > 0 ? h.done / h.goal : 0;
-        extra = h.base > 0 ? (h.extra ?? 0) / h.base : 0;
+        const hb = h.base || h.goal;
+        frac = hb > 0 ? (h.done + (h.rescued ?? 0)) / hb : 0;
+        extra = hb > 0 ? (h.extra ?? 0) / hb : 0;
       }
     } else {
       const share = (t.baseTotal ?? t.total) / per;
@@ -357,7 +363,7 @@ export function scoreDay(s: ScoreInput, k: string): DayScore {
       extra = Math.max(0, n - 1); // beyond the day's share
     }
     const w = wirdWeight(t);
-    add(`awrad:${t.id}`, `وِرد «${t.title.trim() || 'بلا اسم'}»`, w * Math.min(1, frac));
+    add(`awrad:${t.id}`, `وِرد «${t.title.trim() || 'بلا اسم'}»`, w * frac);
     add(`nafl:${t.id}`, `نافلة «${t.title.trim() || 'بلا اسم'}»`, w * extra);
   }
   add('tasbih', 'التسبيح', Math.min(Math.floor((reps.get('tasbih') ?? 0) / 100), LB.tasbihMax) * LB.tasbih);

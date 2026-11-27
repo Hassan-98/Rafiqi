@@ -119,6 +119,8 @@ export interface TargetPeriodRecord {
   done: number;
   /** Bonus (نافلة) beyond the goal. */
   extra: number;
+  /** Reps toward a rescue surcharge (beyond `goal`, not نافلة) — they still earn points. */
+  rescued?: number;
   completed: boolean;
 }
 
@@ -248,6 +250,7 @@ function rolloverTarget(t: Target, sink?: TargetPeriodRecord[]): Target {
     base: baseTotal,
     done: Math.min(t.current, goal),
     extra: t.extra ?? 0,
+    rescued: Math.max(0, t.current - goal) || undefined,
     completed: wasCompleted,
   });
   return {

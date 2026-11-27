@@ -37,6 +37,9 @@ function createDebouncedStorage(delay = 800) {
 
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', flush);
+    // cloudSync reads localStorage directly: a pending write must land first,
+    // or a merge+rehydrate drops the last taps and this stale write lands after it.
+    window.addEventListener('myzikr:flush-storage', flush);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') flush();
     });
@@ -197,7 +200,11 @@ export const useActivityLogStore = create<ActivityLogState>()(
           let next = [event, ...events];
           if (next.length > MAX_EVENTS + 50) {
             const cutoff = ts - MAX_AGE_MS;
-            next = next.filter((e) => e.ts >= cutoff).slice(0, MAX_EVENTS);
+            // Sort first: a cloud merge appends the other device's (newest) events at the end.
+            next = next
+              .filter((e) => e.ts >= cutoff)
+              .sort((a, b) => b.ts - a.ts)
+              .slice(0, MAX_EVENTS);
           }
           return { events: next };
         });

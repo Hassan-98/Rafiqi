@@ -20,6 +20,9 @@ g.localStorage = {
   clear: () => mem.clear(),
 };
 g.window = g;
+const bus = new EventTarget();
+g.addEventListener = bus.addEventListener.bind(bus);
+g.dispatchEvent = bus.dispatchEvent.bind(bus);
 g.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
 if (!('navigator' in g)) g.navigator = { onLine: true };
 
@@ -124,6 +127,18 @@ async function main() {
   const q = JSON.parse(mergeSyncedValue('myzikr:quran', quran(false, 0.4, [1, 2]), quran(true, 1, [2, 3]))).state;
   check('history-store settings keep the local value', q.settings.tajweedEnabled === false && q.settings.volume === 0.4, JSON.stringify(q.settings));
   check('history-store data still unions', [...q.readPages].sort().join(',') === '1,2,3', JSON.stringify(q.readPages));
+
+  // 6) Adhkar read on the other device must reach this device's LIVE activity
+  //    log (programs/badges read it, not localStorage), and a tap still waiting
+  //    on the debounced write must survive the merge.
+  const { useActivityLogStore } = await import('@/store/activityLogStore');
+  useActivityLogStore.getState().log({ domain: 'dhikr', refId: 'evening', title: 'م', amount: 1 });
+  const phone = { id: 'a_phone', ts: Date.now(), dateKey: 'x', domain: 'dhikr', refId: 'morning', title: 'ص', amount: 1 };
+  remote = { ...remote, 'myzikr:activity-log': JSON.stringify({ state: { events: [phone] }, version: 0 }) };
+  remoteAt = new Date().toISOString();
+  await cycle();
+  const refs = useActivityLogStore.getState().events.map((e) => e.refId).sort().join(',');
+  check('other device adhkar reach the live activity log', refs === 'evening,morning', refs);
 
   console.log(failures ? `\n${failures} FAILED` : '\nall passed');
   process.exit(failures ? 1 : 0);

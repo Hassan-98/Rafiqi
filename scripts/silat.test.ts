@@ -167,15 +167,16 @@ const entry = (personId: string, type: ContactType, day: string, h = 10): SilatE
   assert.equal(big.points, 60);
   assert.equal(big.lines.reduce((n, l) => n + l.points, 0), 60);
 
-  // «اجتماع عائلي»: parents 4, siblings 3, everyone else 1 — once per person a day, and it keeps their rhythm
+  // «اجتماع عائلي»: parents 5, uncles/aunts 4, siblings 3, everyone else 1 — once per person a day, and it keeps their rhythm
   const sis = person('sis', 'sister', 7);
   const uncle = person('uncle', 'uncleP', 30);
   const fil = person('fil', 'fatherInLaw', 7);
   const pa = person('pa', 'father', 2);
-  const g = [mom, pa, bro, sis, uncle, fil].map((p) => entry(p.id, 'gathering', TODAY));
-  const gp = silatPointsOn([...g, entry('uncle', 'gathering', TODAY, 15)], [mom, pa, bro, sis, uncle, fil], TODAY);
-  assert.equal(gp.points, 4 + 4 + 3 + 3 + 1 + 4);
-  assert.deepEqual(gp.lines, [{ label: 'اجتماع عائلي ×٦', points: 19 }]);
+  const kid = person('kid', 'cousinAmm', 30);
+  const g = [mom, pa, bro, sis, uncle, fil, kid].map((p) => entry(p.id, 'gathering', TODAY));
+  const gp = silatPointsOn([...g, entry('uncle', 'gathering', TODAY, 15)], [mom, pa, bro, sis, uncle, fil, kid], TODAY);
+  assert.equal(gp.points, 5 + 5 + 3 + 3 + 4 + 5 + 1);
+  assert.deepEqual(gp.lines, [{ label: 'اجتماع عائلي ×٧', points: 26 }]);
   assert.equal(statusOf(uncle, g, TODAY).state, 'done');
   assert.ok(isContact('gathering') && groupOf('gathering') === 'meet');
 }
